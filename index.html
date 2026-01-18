@@ -241,24 +241,35 @@
             try {
                 const res = await fetch(SHEET_CSV_URL);
                 const text = await res.text();
+                
+                // [수정된 파싱 로직] 자바스크립트 호환 Regex 사용
                 const rows = text.split('\n').map(row => {
-                    // Simple CSV parser tackling quotes
-                    const regex = /(?:^|,)(?=[^"]|(")?)"?((?(1)[^"]*|[^,"]*))"?(?=,|$)/g;
-                    const cols = [];
-                    let match;
-                    while ((match = regex.exec(row)) !== null) cols.push(match[2].replace(/""/g, '"'));
-                    return cols;
+                    if (!row.trim()) return [];
+                    // 콤마로 나누되, 따옴표("") 안의 콤마는 무시하는 정규식
+                    const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+                    return row.split(regex).map(cell => {
+                        let val = cell.trim();
+                        // 양끝 따옴표 제거 및 이중 따옴표 처리
+                        if (val.startsWith('"') && val.endsWith('"')) {
+                            val = val.slice(1, -1);
+                        }
+                        return val.replace(/""/g, '"');
+                    });
                 });
 
                 const headers = rows[0].map(h => h.trim());
-                const data = [];
+                
+                // 데이터 매핑 (기존 로직 유지)
+                PLACE_DB = {}; // 초기화
                 for(let i=1; i<rows.length; i++) {
                     if(rows[i].length < headers.length) continue;
                     let obj = {};
-                    rows[i].forEach((val, idx) => obj[headers[idx]] = val.trim());
+                    rows[i].forEach((val, idx) => {
+                        if(headers[idx]) obj[headers[idx]] = val;
+                    });
+                    
                     if(obj.Country) {
                         if(!PLACE_DB[obj.Country]) PLACE_DB[obj.Country] = [];
-                        // Convert Lat/Lon to float
                         obj.lat = parseFloat(obj.lat);
                         obj.lon = parseFloat(obj.lon);
                         PLACE_DB[obj.Country].push(obj);
@@ -267,6 +278,7 @@
                 
                 // Init Country Select
                 const select = document.getElementById('country-select');
+                select.innerHTML = ""; // 기존 옵션 초기화
                 Object.keys(PLACE_DB).sort().forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c; opt.innerText = c;
