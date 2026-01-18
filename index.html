@@ -9,36 +9,37 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        /* 🎨 THEME: Emerald Green & Gold */
+        /* 🎨 THEME */
         :root { 
             --theme: #10B981; 
-            --dark-theme: #047857;
-            --gold: #FFD700; 
+            --theme-ext: #3B82F6; /* 외부 데이터용 파란색 */
             --bg: #0a0a0a; 
             --card-bg: #161616;
             --text: #e0e0e0; 
+            --gold: #FFD700;
         }
         
         body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
         
-        /* Layout & Navigation */
-        .page { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: transform 0.4s ease-in-out; display: flex; flex-direction: column; background: var(--bg); z-index: 100; }
+        /* Layout */
+        .page { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: transform 0.3s ease-in-out; display: flex; flex-direction: column; background: var(--bg); z-index: 100; }
+        .hidden-left { transform: translateX(-100%); }
         .hidden-right { transform: translateX(100%); }
         .hidden-bottom { transform: translateY(100%); }
-        .hidden-left { transform: translateX(-100%); }
         .active { transform: translate(0, 0); }
 
+        /* Top Nav */
         .top-nav { height: 60px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 500; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); }
         .passport-btn { font-size: 24px; cursor: pointer; background: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 12px; border: 1px solid var(--theme); }
         
         .lang-switcher { display: flex; gap: 5px; }
-        .lang-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: #888; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-size: 14px; transition: 0.3s; }
+        .lang-btn { background: rgba(0,0,0,0.6); border: 1px solid #444; color: #888; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-size: 14px; }
         .lang-btn.active { background: var(--theme); color: white; border-color: var(--theme); font-weight: bold; }
 
-        /* Main List */
+        /* Header & Filters */
         .header-title { text-align: center; padding: 10px 0; }
-        .header-title div { color: var(--theme); font-size: 24px; font-weight: 900; letter-spacing: 3px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
-        .map-trigger-btn { margin-top: 10px; padding: 8px 20px; background: var(--theme); color: white; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); }
+        .header-title div { color: var(--theme); font-size: 24px; font-weight: 900; letter-spacing: 3px; }
+        .map-trigger-btn { margin-top: 10px; padding: 8px 20px; background: var(--theme); color: white; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 13px; }
 
         .country-select-container { text-align: center; margin: 10px 0; }
         #country-select { width: 85%; max-width: 400px; padding: 12px; background: #1a1a1a; border: 1px solid var(--theme); color: white; border-radius: 10px; font-size: 16px; outline: none; }
@@ -47,14 +48,14 @@
         .type-btn { padding: 8px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #1a1a1a; color: #777; border: 1px solid #333; white-space: nowrap; cursor: pointer; transition: 0.2s; }
         .type-btn.selected { background: var(--theme); color: white; border-color: var(--theme); }
 
+        /* List */
         .list-container { flex: 1; overflow-y: auto; padding: 0 20px 100px 20px; }
-        .card { background: var(--card-bg); border: 1px solid #333; border-radius: 16px; padding: 20px; margin-bottom: 15px; position: relative; transition: 0.3s; }
-        .card.visited { border: 2px solid var(--gold); box-shadow: 0 0 15px rgba(255, 215, 0, 0.15); }
-        .visited-badge { position: absolute; top: -8px; right: -8px; background: var(--gold); color: black; font-weight: bold; padding: 4px 10px; border-radius: 12px; font-size: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); z-index: 10; animation: popIn 0.3s ease; }
+        .card { background: var(--card-bg); border: 1px solid #333; border-radius: 16px; padding: 20px; margin-bottom: 15px; position: relative; }
+        .card.visited { border: 2px solid var(--gold); }
+        .visited-badge { position: absolute; top: -8px; right: -8px; background: var(--gold); color: black; font-weight: bold; padding: 4px 10px; border-radius: 12px; font-size: 10px; }
         
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .card-name { font-size: 18px; font-weight: bold; color: var(--theme); }
-        .card-dist { font-size: 12px; color: #888; margin-left: 5px; font-weight: normal; }
         .card-label { font-size: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.1); color: var(--theme); border: 1px solid var(--theme); }
         .card-desc { font-size: 13px; color: #aaa; line-height: 1.5; margin-bottom: 15px; }
         .card-actions { display: flex; gap: 8px; }
@@ -62,50 +63,41 @@
         .btn-review { background: var(--theme); color: white; }
         .btn-map { background: #333; color: white; border: 1px solid #555; }
 
-        /* Floating Button (Amina) */
-        .amina-btn { position: fixed; bottom: 30px; right: 20px; width: 70px; height: 70px; border-radius: 50%; background: #000 url('https://cdn-icons-png.flaticon.com/512/4322/4322991.png') no-repeat center center; background-size: 70%; border: 3px solid var(--theme); z-index: 999; box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); cursor: pointer; transition: transform 0.2s; }
-        .amina-btn:active { transform: scale(0.9); }
+        /* Chat */
+        .amina-btn { position: fixed; bottom: 30px; right: 20px; width: 70px; height: 70px; border-radius: 50%; background: #000 url('https://cdn-icons-png.flaticon.com/512/4322/4322991.png') no-repeat center center; background-size: 70%; border: 3px solid var(--theme); z-index: 999; cursor: pointer; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .chat-msg { max-width: 80%; padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
+        .chat-bot { align-self: flex-start; background: #222; border: 1px solid #333; color: #eee; border-top-left-radius: 4px; }
+        .chat-user { align-self: flex-end; background: var(--theme); color: white; border-top-right-radius: 4px; }
+        .chat-input-area { padding: 15px; background: #111; display: flex; gap: 10px; border-top: 1px solid #333; }
+        .chat-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
+        .chat-send { padding: 0 20px; background: var(--theme); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        
+        /* Chat Recommendations */
+        .reco-btn { margin-top: 8px; padding: 10px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+        .reco-btn.external { background: var(--theme-ext); border: 1px dashed #60A5FA; } /* 외부 데이터 파란색 */
 
-        /* Sub Pages */
+        /* Detail & Map */
         .nav-bar { height: 60px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #333; background: #111; font-weight: bold; font-size: 18px; }
         .nav-back { background: none; border: none; color: white; font-size: 24px; margin-right: 15px; cursor: pointer; }
-
-        /* Detail Page */
         #detail-map { width: 100%; height: 35vh; border-bottom: 2px solid var(--theme); }
         .review-box { flex: 1; overflow-y: auto; padding: 25px; }
         .review-title { font-size: 24px; color: var(--theme); font-weight: bold; margin-bottom: 5px; }
-        .review-sub { font-size: 14px; color: #888; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #333; }
         .review-content { font-size: 15px; line-height: 1.8; color: #ddd; white-space: pre-wrap; font-family: 'Segoe UI', serif; }
-        .review-sign { text-align: right; margin-top: 20px; color: var(--theme); font-weight: bold; font-style: italic; }
-        .review-actions { display: flex; gap: 10px; margin-top: 30px; padding-bottom: 30px; }
+        .btn-add-db { background: #F59E0B; color: black; margin-top: 10px; } /* DB 추가 버튼 주황색 */
 
-        /* Map Page */
+        /* Map Search */
         .map-search-box { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; display: flex; gap: 10px; z-index: 1000; }
         .map-input { flex: 1; padding: 12px 20px; border-radius: 30px; border: 2px solid var(--theme); background: rgba(0,0,0,0.85); color: white; outline: none; }
-        .gps-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--theme); border: none; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .gps-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--theme); border: none; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-        /* Passport Page */
+        /* Passport */
         .passport-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 20px; overflow-y: auto; }
         .stamp { aspect-ratio: 1; border: 2px dashed #444; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #444; font-size: 10px; background: #111; text-align: center; padding: 5px; }
         .stamp.active { border: 2px solid var(--gold); background: rgba(255, 215, 0, 0.05); color: var(--gold); }
         .stamp-icon { font-size: 24px; margin-bottom: 5px; }
-
-        /* Chat Page */
-        .chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .chat-msg { max-width: 80%; padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
-        .chat-bot { align-self: flex-start; background: #222; border: 1px solid #333; color: #eee; border-top-left-radius: 4px; }
-        .chat-user { align-self: flex-end; background: var(--theme); color: white; border-top-right-radius: 4px; font-weight: 500; }
-        .chat-input-area { padding: 15px; background: #111; display: flex; gap: 10px; border-top: 1px solid #333; }
-        .chat-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
-        .chat-send { padding: 0 20px; background: var(--theme); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        .reco-btn { margin-top: 8px; padding: 8px 12px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 12px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; }
         
-        /* Leaflet Custom */
-        .leaflet-popup-content-wrapper { background: #1a1a1a; color: white; border: 1px solid var(--theme); }
-        .leaflet-popup-content { margin: 10px; width: 200px !important; }
-        .popup-btn { width: 100%; margin-top: 5px; padding: 6px; border-radius: 4px; border: none; font-size: 11px; font-weight: bold; cursor: pointer; }
-        
-        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+        .leaflet-popup-content { color: #333; }
     </style>
 </head>
 <body>
@@ -120,19 +112,15 @@
                 <div class="lang-btn" id="lang-CN" onclick="setLang('CN')">CN</div>
             </div>
         </div>
-        
         <div class="header-title">
             <div>HALAL PLANE</div>
             <button class="map-trigger-btn" onclick="nav('page-map', 'bottom'); initMap();">🗺️ EXPLORE WORLD</button>
         </div>
-
         <div class="country-select-container">
             <select id="country-select" onchange="filterCountry(this.value)"></select>
         </div>
-
         <div class="filter-container" id="filter-box"></div>
         <div class="list-container" id="place-list"></div>
-        
         <div class="amina-btn" onclick="nav('page-chat', 'bottom'); startChat();"></div>
     </div>
 
@@ -177,25 +165,23 @@
         <div class="review-box">
             <div id="review-title" class="review-title">Loading...</div>
             <div id="review-sub" class="review-sub"></div>
-            <div id="review-content" class="review-content">
-                Wait a moment, Amina is checking the Halal status... 🕌
-            </div>
+            <div id="review-content" class="review-content">Loading AI Review...</div>
             <div class="review-actions">
-                <button id="btn-open-map" class="action-btn btn-map">🗺️ OPEN MAP</button>
+                <button id="btn-open-map" class="action-btn btn-map">🗺️ SEARCH MAP</button>
                 <button id="btn-stamp" class="action-btn btn-review">✈️ STAMP</button>
             </div>
-        </div>
+            <div id="add-db-area"></div> </div>
     </div>
 
     <script type="module">
-        // 🧠 Import AI Brain
         import { AIBrain } from './ai_brain.js';
 
-        // ==========================================
-        // ⚙️ CONFIG & DATA
-        // ==========================================
+        // ⚙️ CONFIG
         let GROQ_API_KEY = "GROQ_KEY_PLACEHOLDER";
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNTKjVwyPYpXBkAux_dPlqV6V2QMAe-uXcH0kkS0e9VQxKABasjiNT0smYJiogQ6oOM1vpxZ3bPz0a/pub?output=csv";
+        
+        // 🔥 [REAL] Google Apps Script URL
+        const GAS_URL = "https://script.google.com/macros/s/AKfycby5zlQsPh2kNZljbcw-8YHYu1GArw4xy-q63jQiKL0HiysTXg2tpaHID701FqFxc_aj/exec";
 
         // Global State
         let PLACE_DB = {};
@@ -203,53 +189,27 @@
         let currentFilter = 'All';
         let currentCountry = '';
         let visitedPlaces = JSON.parse(localStorage.getItem('visitedPlaces') || '[]');
+        let requestList = JSON.parse(localStorage.getItem('requestList') || '[]'); // 사용자 요청 리스트
         let userLat = null, userLon = null;
         let mapInstance = null, detailMapInstance = null;
         let markerLayer = null;
         let chatHistory = [];
         let amina = null;
 
-        // [Updated] Categories with Mosque
         const TRANSLATIONS = {
-            "KO": { 
-                ai: "Korean", 
-                greet: "앗살라무 알라이쿰! 🕌 할랄 맛집을 찾아드릴까요?", 
-                filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페", "🕌 기도실"], 
-                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
-            },
-            "EN": { 
-                ai: "English", 
-                greet: "Assalamu Alaikum! Craving some Halal food?", 
-                filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe", "🕌 Mosque"], 
-                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
-            },
-            "JP": { 
-                ai: "Japanese", 
-                greet: "アッサラーム・アライクム！ハラール料理を探しますか？", 
-                filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ", "🕌 モスク"], 
-                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
-            },
-            "CN": { 
-                ai: "Chinese", 
-                greet: "色兰! 想吃什么清真美食?", 
-                filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡", "🕌 清真寺"], 
-                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
-            }
+            "KO": { ai: "Korean", greet: "앗살라무 알라이쿰! 🕌 무엇을 도와드릴까요?", filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페", "🕌 기도실"] },
+            "EN": { ai: "English", greet: "Assalamu Alaikum! How can I help you?", filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe", "🕌 Mosque"] },
+            "JP": { ai: "Japanese", greet: "アッサラーム・アライクム！お手伝いしましょうか？", filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ", "🕌 モスク"] },
+            "CN": { ai: "Chinese", greet: "色兰! 需要什么帮助?", filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡", "🕌 清真寺"] }
         };
 
-        // ==========================================
-        // 🚀 INITIALIZATION
-        // ==========================================
+        // 🚀 INIT
         window.onload = async () => {
             if (!GROQ_API_KEY || GROQ_API_KEY.includes("PLACEHOLDER")) {
-                const inputKey = prompt("Please enter your Groq API Key to start Halal Plane:");
+                const inputKey = prompt("Groq API Key:");
                 if (inputKey) GROQ_API_KEY = inputKey;
-                else alert("Features relying on Amina (AI) will not work without an API Key.");
             }
-
-            // Init Brain
             amina = new AIBrain(GROQ_API_KEY, TRANSLATIONS[currentLang]);
-
             await loadData();
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -264,7 +224,6 @@
             try {
                 const res = await fetch(SHEET_CSV_URL);
                 const text = await res.text();
-                
                 const rows = text.split('\n').map(row => {
                     if (!row.trim()) return [];
                     const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
@@ -274,16 +233,12 @@
                         return val.replace(/""/g, '"');
                     });
                 });
-
                 const headers = rows[0].map(h => h.trim());
                 PLACE_DB = {}; 
                 for(let i=1; i<rows.length; i++) {
                     if(rows[i].length < headers.length) continue;
                     let obj = {};
-                    rows[i].forEach((val, idx) => {
-                        if(headers[idx]) obj[headers[idx]] = val;
-                    });
-                    
+                    rows[i].forEach((val, idx) => { if(headers[idx]) obj[headers[idx]] = val; });
                     if(obj.Country) {
                         if(!PLACE_DB[obj.Country]) PLACE_DB[obj.Country] = [];
                         obj.lat = parseFloat(obj.lat);
@@ -291,7 +246,6 @@
                         PLACE_DB[obj.Country].push(obj);
                     }
                 }
-                
                 const select = document.getElementById('country-select');
                 select.innerHTML = "";
                 Object.keys(PLACE_DB).sort().forEach(c => {
@@ -299,7 +253,6 @@
                     opt.value = c; opt.innerText = c;
                     select.appendChild(opt);
                 });
-                
                 if(Object.keys(PLACE_DB).length > 0) {
                     currentCountry = Object.keys(PLACE_DB)[0];
                     renderFilters();
@@ -308,9 +261,7 @@
             } catch (e) { console.error(e); }
         }
 
-        // ==========================================
-        // 🎨 UI RENDERING
-        // ==========================================
+        // UI Functions
         window.nav = function(pageId, effect = 'left') {
             document.querySelectorAll('.page').forEach(p => {
                 p.classList.remove('active', 'hidden-left', 'hidden-right', 'hidden-bottom');
@@ -326,20 +277,17 @@
             currentLang = lang;
             document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(`lang-${lang}`).classList.add('active');
-            
-            // Brain Lang Update
             if(amina) amina.t = TRANSLATIONS[lang];
-
             renderFilters();
             renderList();
-            if(mapInstance) initMap();
         }
 
         function renderFilters() {
             const box = document.getElementById('filter-box');
             box.innerHTML = '';
             TRANSLATIONS[currentLang].filters.forEach((label, idx) => {
-                const typeKey = TRANSLATIONS[currentLang].types[idx];
+                const types = ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"];
+                const typeKey = types[idx];
                 const btn = document.createElement('div');
                 btn.className = `type-btn ${currentFilter === typeKey ? 'selected' : ''}`;
                 btn.innerText = label;
@@ -353,25 +301,21 @@
         function renderList() {
             const list = document.getElementById('place-list');
             list.innerHTML = '';
-            
             const places = PLACE_DB[currentCountry] || [];
             
-            // [Updated] Category Filter Logic
+            // [Updated] Category Filter
             const filtered = places.filter(p => {
                 if(currentFilter === 'All') return true;
-                if(currentFilter === 'Mosque') {
-                    // Check if category is Place or Mosque
-                    return (p.category && (p.category.includes('Place') || p.category.includes('Mosque')));
-                }
+                if(currentFilter === 'Mosque') return (p.category && (p.category.includes('Place') || p.category.includes('Mosque')));
                 return (p.category && p.category.includes(currentFilter));
             });
 
             filtered.forEach(p => {
                 const isVisited = visitedPlaces.includes(p.name);
                 const langKey = currentLang.toLowerCase();
-                const desc = p[`desc_${langKey}`] || p.desc_ko || p.desc || "";
+                const desc = p[`desc_${langKey}`] || p.desc_ko || "";
                 const nameKoHtml = p.name_ko ? `<span style="font-size:0.8em; color:#047857; margin-left:4px;">(${p.name_ko})</span>` : "";
-
+                
                 let distHtml = "";
                 if(userLat && userLon && p.lat && p.lon) {
                     const dist = calcDist(userLat, userLon, p.lat, p.lon);
@@ -405,45 +349,91 @@
                 el.innerHTML = `<div class="stamp-icon">🥩</div><div>${name}</div>`;
                 grid.appendChild(el);
             });
-            for(let c in PLACE_DB) {
-                PLACE_DB[c].forEach(p => {
-                    if(!visitedPlaces.includes(p.name)) {
-                        const el = document.createElement('div');
-                        el.className = 'stamp';
-                        el.innerHTML = `<div class="stamp-icon">🕌</div><div>?</div>`;
-                        grid.appendChild(el);
-                    }
-                });
-            }
         }
 
         // ==========================================
-        // 🤖 AI BRAIN INTERACTION
+        // 🤖 SMART AI INTERACTION
         // ==========================================
-        window.openReview = async function(name, country) {
+        window.openReview = async function(name, country, isExternal = false) {
             nav('page-detail', 'right');
             document.getElementById('review-title').innerText = name;
-            document.getElementById('review-sub').innerText = country;
-            document.getElementById('review-content').innerText = "Amina is analyzing Halal status... 🕌";
+            document.getElementById('review-sub').innerText = country + (isExternal ? " (WEB SEARCH)" : "");
+            document.getElementById('review-content').innerText = "Amina is checking details... 🕌";
             
+            const addArea = document.getElementById('add-db-area');
+            addArea.innerHTML = ""; // Reset
+
             let place = null;
-            if (PLACE_DB[country]) place = PLACE_DB[country].find(p => p.name === name);
-            
+            if (!isExternal && PLACE_DB[country]) place = PLACE_DB[country].find(p => p.name === name);
+
+            // [Smart Map Link]
             document.getElementById('btn-open-map').onclick = () => {
                 if (place) window.open(getMapLink(place, country), '_blank');
-                else alert("Map location not found.");
+                else {
+                    // External Search Link
+                    const query = name + " " + country;
+                    const url = (country.includes("Korea") || country.includes("한국")) 
+                        ? "https://map.naver.com/p/search/" + encodeURIComponent(query)
+                        : "https://www.google.com/maps/search/" + encodeURIComponent(query);
+                    window.open(url, '_blank');
+                }
             };
-            document.getElementById('btn-stamp').onclick = () => markVisited(name);
 
+            // [Real Add to DB Button]
+            if (isExternal) {
+                const addBtn = document.createElement('button');
+                addBtn.className = "action-btn btn-add-db";
+                addBtn.innerText = "➕ Save to Database (Real)";
+                
+                addBtn.onclick = async () => {
+                    addBtn.innerText = "⏳ Saving...";
+                    addBtn.disabled = true;
+
+                    try {
+                        // Send POST to Google Apps Script
+                        await fetch(GAS_URL, {
+                            method: "POST",
+                            mode: "no-cors", 
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ name: name, country: country })
+                        });
+
+                        alert(`✅ Success! "${name}" has been requested.`);
+                        addBtn.innerText = "✔ Requested";
+                        addBtn.style.background = "#10B981"; // Green
+                        
+                        // Local storage backup
+                        if(!requestList.includes(name)) {
+                            requestList.push(name);
+                            localStorage.setItem('requestList', JSON.stringify(requestList));
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        alert("❌ Failed to send request.");
+                        addBtn.innerText = "Retry";
+                        addBtn.disabled = false;
+                    }
+                };
+                addArea.appendChild(addBtn);
+                document.getElementById('btn-stamp').style.display = 'none';
+            } else {
+                document.getElementById('btn-stamp').style.display = 'block';
+                document.getElementById('btn-stamp').onclick = () => markVisited(name);
+            }
+
+            // Map Rendering (Internal only)
             if(place && place.lat && place.lon) {
                 if(detailMapInstance) detailMapInstance.remove();
                 detailMapInstance = L.map('detail-map').setView([place.lat, place.lon], 16);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMapInstance);
                 L.marker([place.lat, place.lon]).addTo(detailMapInstance);
+            } else {
+                if(detailMapInstance) detailMapInstance.remove();
+                document.getElementById('detail-map').innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:#666;'>No Map Data (External)</div>";
             }
 
-            // Brain Call
-            const reply = await amina.writeReview(place, country);
+            // AI Review
+            const reply = await amina.writeReview(name, country, isExternal, place);
             document.getElementById('review-content').innerHTML = reply;
         }
 
@@ -451,26 +441,24 @@
             const input = document.getElementById('chat-msg-input');
             const txt = input.value.trim();
             if(!txt) return;
-            
             addChatBubble(txt, 'user');
             input.value = '';
             addChatBubble("Amina is thinking...", 'bot', false, 'temp-loading');
 
             const userLoc = (userLat) ? {lat: userLat, lon: userLon} : null;
-            
-            // Brain Call
             const reply = await amina.ask(txt, chatHistory, PLACE_DB, currentCountry, userLoc);
             
             const loading = document.getElementById('temp-loading');
             if(loading) loading.remove();
 
-            let fmtReply = reply.replace(/\[(.*?)\]/g, (match, p1) => {
-                let foundC = "";
-                for(let c in PLACE_DB) {
-                    if(PLACE_DB[c].find(p => p.name.includes(p1))) { foundC = c; break; }
-                }
-                if(foundC) return `<br><button class="reco-btn" onclick="openReview('${p1.replace(/'/g, "\\'")}', '${foundC}')">📍 ${p1}</button>`;
-                return match;
+            // [Button Parser]
+            let fmtReply = reply.replace(/\[(.*?)\](\s*\(External\))?/g, (match, p1, p2) => {
+                const name = p1;
+                const isExternal = !!p2; // true if (External) tag exists
+                const btnClass = isExternal ? "reco-btn external" : "reco-btn";
+                const label = isExternal ? `🌐 ${name} (Web Search)` : `📍 ${name}`;
+                
+                return `<br><button class="${btnClass}" onclick="openReview('${name.replace(/'/g, "\\'")}', '${currentCountry}', ${isExternal})">${label}</button>`;
             });
 
             addChatBubble(fmtReply, 'bot', true);
@@ -492,9 +480,7 @@
             if(chatHistory.length === 0) addChatBubble(TRANSLATIONS[currentLang].greet, 'bot');
         }
 
-        // ==========================================
-        // 🗺️ MAP & UTILS
-        // ==========================================
+        // Map Utils
         window.initMap = function() {
             if(!mapInstance) {
                 mapInstance = L.map('world-map').setView([20, 0], 2);
@@ -502,23 +488,10 @@
                 markerLayer = L.layerGroup().addTo(mapInstance);
             }
             markerLayer.clearLayers();
-
             for(let c in PLACE_DB) {
                 PLACE_DB[c].forEach(p => {
                     if(p.lat && p.lon) {
-                        const langKey = currentLang.toLowerCase();
-                        const desc = (p[`desc_${langKey}`] || p.desc_ko || "").substring(0,50)+"...";
-                        const html = `
-                            <div style="font-size:13px;">
-                                <b style="color:#10B981">${p.name}</b><br>
-                                <span style="color:#666">${p.label}</span><br>
-                                <div style="margin:5px 0;">${desc}</div>
-                                <div style="display:flex; gap:5px;">
-                                    <button class="popup-btn" style="background:#10B981; color:white;" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${c}')">REVIEW</button>
-                                    <button class="popup-btn" style="background:#333; color:white;" onclick="window.open('${getMapLink(p, c)}', '_blank')">MAP</button>
-                                </div>
-                            </div>
-                        `;
+                        const html = `<div><b>${p.name}</b><br><button class="popup-btn" style="background:#10B981;color:white;" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${c}')">REVIEW</button></div>`;
                         L.marker([p.lat, p.lon]).addTo(markerLayer).bindPopup(html);
                     }
                 });
@@ -531,7 +504,7 @@
             let found = false;
             for(let c in PLACE_DB) {
                 for(let p of PLACE_DB[c]) {
-                    const str = (p.name + " " + p.name_ko + " " + p.address).toLowerCase();
+                    const str = (p.name + " " + p.name_ko).toLowerCase();
                     if(str.includes(q) && p.lat) {
                         mapInstance.setView([p.lat, p.lon], 16);
                         L.popup().setLatLng([p.lat, p.lon]).setContent(`<b>${p.name}</b>`).openOn(mapInstance);
@@ -540,7 +513,7 @@
                 }
                 if(found) break;
             }
-            if(!found) alert("Place not found.");
+            if(!found) alert("Place not found in DB.");
         }
 
         window.panToUser = function() {
@@ -554,24 +527,22 @@
                 localStorage.setItem('visitedPlaces', JSON.stringify(visitedPlaces));
                 alert("✈️ Stamped on Passport!");
                 renderList(); 
-            } else { alert("Already visited!"); }
+            } else alert("Already visited!");
         }
 
         function calcDist(lat1, lon1, lat2, lon2) {
             const R = 6371; 
-            const dLat = deg2rad(lat2-lat1);
-            const dLon = deg2rad(lon2-lon1); 
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const dLat = (lat2-lat1) * (Math.PI/180);
+            const dLon = (lon2-lon1) * (Math.PI/180); 
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*(Math.PI/180)) * Math.cos(lat2*(Math.PI/180)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
             return (R * c).toFixed(1);
         }
-        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         function getMapLink(p, c) {
             if(c.includes("Korea") || c.includes("한국")) {
                 if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
-                if(p.address && /[가-힣]/.test(p.address)) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address);
-                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name + " " + p.address);
+                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name);
             }
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
