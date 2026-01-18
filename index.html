@@ -98,8 +98,6 @@
         .chat-input-area { padding: 15px; background: #111; display: flex; gap: 10px; border-top: 1px solid #333; }
         .chat-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
         .chat-send { padding: 0 20px; background: var(--theme); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        
-        /* [Fix 5] Reco Btn CSS Added */
         .reco-btn { margin-top: 8px; padding: 8px 12px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 12px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; }
         
         /* Leaflet Custom */
@@ -189,11 +187,13 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        // 🧠 Import AI Brain
+        import { AIBrain } from './ai_brain.js';
+
         // ==========================================
-        // ⚙️ 0. CONFIGURATION & DATA
+        // ⚙️ CONFIG & DATA
         // ==========================================
-        
         let GROQ_API_KEY = "GROQ_KEY_PLACEHOLDER";
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNTKjVwyPYpXBkAux_dPlqV6V2QMAe-uXcH0kkS0e9VQxKABasjiNT0smYJiogQ6oOM1vpxZ3bPz0a/pub?output=csv";
 
@@ -205,30 +205,52 @@
         let visitedPlaces = JSON.parse(localStorage.getItem('visitedPlaces') || '[]');
         let userLat = null, userLon = null;
         let mapInstance = null, detailMapInstance = null;
-        let markerLayer = null; // [Fix 4] Separate marker layer
+        let markerLayer = null;
         let chatHistory = [];
+        let amina = null;
 
-        // Constants
+        // [Updated] Categories with Mosque
         const TRANSLATIONS = {
-            "KO": { ai: "Korean", greet: "앗살라무 알라이쿰! 🕌 할랄 맛집을 찾아드릴까요?", filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페"], types: ["All", "Asian", "Western", "Middle East", "Cafe"] },
-            "EN": { ai: "English", greet: "Assalamu Alaikum! Craving some Halal food?", filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe"], types: ["All", "Asian", "Western", "Middle East", "Cafe"] },
-            "JP": { ai: "Japanese", greet: "アッサラーム・アライクム！ハラール料理を探しますか？", filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ"], types: ["All", "Asian", "Western", "Middle East", "Cafe"] },
-            "CN": { ai: "Chinese", greet: "色兰! 想吃什么清真美食?", filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡"], types: ["All", "Asian", "Western", "Middle East", "Cafe"] }
+            "KO": { 
+                ai: "Korean", 
+                greet: "앗살라무 알라이쿰! 🕌 할랄 맛집을 찾아드릴까요?", 
+                filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페", "🕌 기도실"], 
+                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
+            },
+            "EN": { 
+                ai: "English", 
+                greet: "Assalamu Alaikum! Craving some Halal food?", 
+                filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe", "🕌 Mosque"], 
+                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
+            },
+            "JP": { 
+                ai: "Japanese", 
+                greet: "アッサラーム・アライクム！ハラール料理を探しますか？", 
+                filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ", "🕌 モスク"], 
+                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
+            },
+            "CN": { 
+                ai: "Chinese", 
+                greet: "色兰! 想吃什么清真美食?", 
+                filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡", "🕌 清真寺"], 
+                types: ["All", "Asian", "Western", "Middle East", "Cafe", "Mosque"] 
+            }
         };
 
         // ==========================================
-        // 🚀 1. INITIALIZATION
+        // 🚀 INITIALIZATION
         // ==========================================
         window.onload = async () => {
-            // [Fix 1] Robust API Key Check
             if (!GROQ_API_KEY || GROQ_API_KEY.includes("PLACEHOLDER")) {
                 const inputKey = prompt("Please enter your Groq API Key to start Halal Plane:");
                 if (inputKey) GROQ_API_KEY = inputKey;
                 else alert("Features relying on Amina (AI) will not work without an API Key.");
             }
 
+            // Init Brain
+            amina = new AIBrain(GROQ_API_KEY, TRANSLATIONS[currentLang]);
+
             await loadData();
-            
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userLat = pos.coords.latitude;
@@ -248,9 +270,7 @@
                     const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
                     return row.split(regex).map(cell => {
                         let val = cell.trim();
-                        if (val.startsWith('"') && val.endsWith('"')) {
-                            val = val.slice(1, -1);
-                        }
+                        if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
                         return val.replace(/""/g, '"');
                     });
                 });
@@ -285,41 +305,34 @@
                     renderFilters();
                     renderList();
                 }
-
-            } catch (e) {
-                console.error("Data Load Error:", e);
-                alert("Failed to load Halal Database.");
-            }
+            } catch (e) { console.error(e); }
         }
 
         // ==========================================
-        // 🎨 2. UI RENDERING
+        // 🎨 UI RENDERING
         // ==========================================
-        // [Fix 2] Logic Improved Nav
-        function nav(pageId, effect = 'left') {
+        window.nav = function(pageId, effect = 'left') {
             document.querySelectorAll('.page').forEach(p => {
                 p.classList.remove('active', 'hidden-left', 'hidden-right', 'hidden-bottom');
-                if (p.id !== pageId) {
-                    // Push other pages to the default hidden side (left) or custom
-                    p.classList.add('hidden-left'); 
-                }
+                if (p.id !== pageId) p.classList.add('hidden-left');
             });
             const target = document.getElementById(pageId);
             target.classList.remove('hidden-left', 'hidden-right', 'hidden-bottom');
             target.classList.add('active');
-            
             if(pageId === 'page-passport') renderPassport();
         }
 
-        function setLang(lang) {
+        window.setLang = function(lang) {
             currentLang = lang;
             document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(`lang-${lang}`).classList.add('active');
+            
+            // Brain Lang Update
+            if(amina) amina.t = TRANSLATIONS[lang];
+
             renderFilters();
             renderList();
-            
-            // If map is open, refresh markers for language change
-            if(mapInstance) initMap(); 
+            if(mapInstance) initMap();
         }
 
         function renderFilters() {
@@ -335,29 +348,35 @@
             });
         }
 
-        function filterCountry(c) { currentCountry = c; renderList(); }
+        window.filterCountry = function(c) { currentCountry = c; renderList(); }
 
         function renderList() {
             const list = document.getElementById('place-list');
             list.innerHTML = '';
             
             const places = PLACE_DB[currentCountry] || [];
-            const filtered = places.filter(p => currentFilter === 'All' || (p.category && p.category.includes(currentFilter)));
+            
+            // [Updated] Category Filter Logic
+            const filtered = places.filter(p => {
+                if(currentFilter === 'All') return true;
+                if(currentFilter === 'Mosque') {
+                    // Check if category is Place or Mosque
+                    return (p.category && (p.category.includes('Place') || p.category.includes('Mosque')));
+                }
+                return (p.category && p.category.includes(currentFilter));
+            });
 
             filtered.forEach(p => {
                 const isVisited = visitedPlaces.includes(p.name);
-                
                 const langKey = currentLang.toLowerCase();
                 const desc = p[`desc_${langKey}`] || p.desc_ko || p.desc || "";
+                const nameKoHtml = p.name_ko ? `<span style="font-size:0.8em; color:#047857; margin-left:4px;">(${p.name_ko})</span>` : "";
 
                 let distHtml = "";
                 if(userLat && userLon && p.lat && p.lon) {
                     const dist = calcDist(userLat, userLon, p.lat, p.lon);
                     distHtml = `<span class="card-dist">(📍 ${dist}km)</span>`;
                 }
-
-                // [Feature] Korean Name
-                const nameKoHtml = p.name_ko ? `<span style="font-size:0.8em; color:#047857; margin-left:4px;">(${p.name_ko})</span>` : "";
 
                 const div = document.createElement('div');
                 div.className = `card ${isVisited ? 'visited' : ''}`;
@@ -399,41 +418,17 @@
         }
 
         // ==========================================
-        // 🤖 3. AI & LOGIC (AMINA & ZOMBIE MODE)
+        // 🤖 AI BRAIN INTERACTION
         // ==========================================
-        const ZOMBIE_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
-
-        async function callGroq(messages) {
-            if(!GROQ_API_KEY || GROQ_API_KEY.includes("PLACEHOLDER")) return "Please set your API Key in GitHub Secrets.";
-            
-            for (let model of ZOMBIE_MODELS) {
-                try {
-                    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
-                        body: JSON.stringify({ model: model, messages: messages, temperature: 0.7 })
-                    });
-                    if(res.status === 429) { await new Promise(r => setTimeout(r, 1000)); continue; }
-                    if(!res.ok) throw new Error(res.status);
-                    const data = await res.json();
-                    return data.choices[0].message.content;
-                } catch(e) { continue; }
-            }
-            return "Amina is currently unavailable (Network Error).";
-        }
-
-        async function openReview(name, country) {
+        window.openReview = async function(name, country) {
             nav('page-detail', 'right');
             document.getElementById('review-title').innerText = name;
             document.getElementById('review-sub').innerText = country;
             document.getElementById('review-content').innerText = "Amina is analyzing Halal status... 🕌";
             
             let place = null;
-            if (PLACE_DB[country]) {
-                place = PLACE_DB[country].find(p => p.name === name);
-            }
+            if (PLACE_DB[country]) place = PLACE_DB[country].find(p => p.name === name);
             
-            // [Fix 3] Null Check for Map Button
             document.getElementById('btn-open-map').onclick = () => {
                 if (place) window.open(getMapLink(place, country), '_blank');
                 else alert("Map location not found.");
@@ -447,48 +442,28 @@
                 L.marker([place.lat, place.lon]).addTo(detailMapInstance);
             }
 
-            const context = place ? (place[`desc_${currentLang.toLowerCase()}`] || place.desc_ko || "") : "";
-            const addr = place ? place.address : "";
-            
-            const prompt = `
-            ROLE: You are Amina, a Halal travel expert.
-            TASK: Review "${name}" in "${country}".
-            CONTEXT: ${context} | ADDR: ${addr}
-            REQUIRED SECTIONS (Translate headers to ${TRANSLATIONS[currentLang].ai}):
-            1. 📍 Address & Access
-            2. 🕌 Halal Status & Prayer Room (Important!)
-            3. 👥 Atmosphere
-            4. 🥘 Must-Try Menu
-            5. 🍯 Local Tip
-            6. 🏁 Amina's Verdict
-            LANGUAGE: Respond STRICTLY in ${TRANSLATIONS[currentLang].ai}.
-            `;
-
-            const reply = await callGroq([{role: "system", content: prompt}]);
-            // [Fix 6] InnerHTML used for formatting, keeping it as is per requirement
+            // Brain Call
+            const reply = await amina.writeReview(place, country);
             document.getElementById('review-content').innerHTML = reply;
         }
 
-        async function sendChat() {
+        window.sendChat = async function() {
             const input = document.getElementById('chat-msg-input');
             const txt = input.value.trim();
             if(!txt) return;
+            
             addChatBubble(txt, 'user');
             input.value = '';
-            chatHistory.push({role: "user", content: txt});
+            addChatBubble("Amina is thinking...", 'bot', false, 'temp-loading');
 
-            let dbContext = "PLACES: " + Object.values(PLACE_DB).flat().map(p => p.name).join(", ");
-            if(dbContext.length > 5000) dbContext = dbContext.substring(0, 5000);
-            let gpsContext = (userLat) ? `GPS: ${userLat}, ${userLon}` : "No GPS";
+            const userLoc = (userLat) ? {lat: userLat, lon: userLon} : null;
+            
+            // Brain Call
+            const reply = await amina.ask(txt, chatHistory, PLACE_DB, currentCountry, userLoc);
+            
+            const loading = document.getElementById('temp-loading');
+            if(loading) loading.remove();
 
-            const sysPrompt = `
-            You are Amina, a Halal guide. Speak ONLY in ${TRANSLATIONS[currentLang].ai}.
-            [DATA] ${dbContext}
-            [GPS] ${gpsContext}
-            RULES: 1. Recommend Halal places. 2. Output place names in [BRACKETS] e.g. [Eid].
-            `;
-
-            const reply = await callGroq([{role: "system", content: sysPrompt}, ...chatHistory.slice(-4)]);
             let fmtReply = reply.replace(/\[(.*?)\]/g, (match, p1) => {
                 let foundC = "";
                 for(let c in PLACE_DB) {
@@ -497,35 +472,35 @@
                 if(foundC) return `<br><button class="reco-btn" onclick="openReview('${p1.replace(/'/g, "\\'")}', '${foundC}')">📍 ${p1}</button>`;
                 return match;
             });
+
             addChatBubble(fmtReply, 'bot', true);
+            chatHistory.push({role: "user", content: txt});
             chatHistory.push({role: "assistant", content: reply});
         }
 
-        function addChatBubble(text, sender, isHtml = false) {
+        function addChatBubble(text, sender, isHtml = false, id = null) {
             const box = document.getElementById('chat-box');
             const el = document.createElement('div');
             el.className = `chat-msg chat-${sender}`;
+            if(id) el.id = id;
             if(isHtml) el.innerHTML = text; else el.innerText = text;
             box.appendChild(el);
             box.scrollTop = box.scrollHeight;
         }
 
-        function startChat() {
+        window.startChat = function() {
             if(chatHistory.length === 0) addChatBubble(TRANSLATIONS[currentLang].greet, 'bot');
         }
 
         // ==========================================
-        // 🗺️ 4. MAP & UTILS
+        // 🗺️ MAP & UTILS
         // ==========================================
-        // [Fix 4] Logic Improved InitMap with Layer Clearing
-        function initMap() {
+        window.initMap = function() {
             if(!mapInstance) {
                 mapInstance = L.map('world-map').setView([20, 0], 2);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
                 markerLayer = L.layerGroup().addTo(mapInstance);
             }
-            
-            // Clear existing markers before re-adding (avoids duplicates on lang switch)
             markerLayer.clearLayers();
 
             for(let c in PLACE_DB) {
@@ -533,7 +508,6 @@
                     if(p.lat && p.lon) {
                         const langKey = currentLang.toLowerCase();
                         const desc = (p[`desc_${langKey}`] || p.desc_ko || "").substring(0,50)+"...";
-                        
                         const html = `
                             <div style="font-size:13px;">
                                 <b style="color:#10B981">${p.name}</b><br>
@@ -551,17 +525,13 @@
             }
         }
 
-        function searchMap() {
+        window.searchMap = function() {
             const q = document.getElementById('map-input').value.toLowerCase();
             if(!q) return;
             let found = false;
             for(let c in PLACE_DB) {
-                if(c.toLowerCase().includes(q) && PLACE_DB[c][0].lat) {
-                    mapInstance.setView([PLACE_DB[c][0].lat, PLACE_DB[c][0].lon], 12);
-                    found = true; break;
-                }
                 for(let p of PLACE_DB[c]) {
-                    const str = (p.name + " " + p.address + " " + p.desc_ko).toLowerCase();
+                    const str = (p.name + " " + p.name_ko + " " + p.address).toLowerCase();
                     if(str.includes(q) && p.lat) {
                         mapInstance.setView([p.lat, p.lon], 16);
                         L.popup().setLatLng([p.lat, p.lon]).setContent(`<b>${p.name}</b>`).openOn(mapInstance);
@@ -570,10 +540,10 @@
                 }
                 if(found) break;
             }
-            if(!found) alert("Place not found in database.");
+            if(!found) alert("Place not found.");
         }
 
-        function panToUser() {
+        window.panToUser = function() {
             if(userLat && userLon && mapInstance) mapInstance.setView([userLat, userLon], 14);
             else alert("Waiting for GPS...");
         }
@@ -587,7 +557,6 @@
             } else { alert("Already visited!"); }
         }
 
-        // [Fix] deg2rad error fixed
         function calcDist(lat1, lon1, lat2, lon2) {
             const R = 6371; 
             const dLat = deg2rad(lat2-lat1);
@@ -598,7 +567,6 @@
         }
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
-        // [Feature] Smart Map Link Generator
         function getMapLink(p, c) {
             if(c.includes("Korea") || c.includes("한국")) {
                 if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
@@ -607,7 +575,6 @@
             }
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
-
     </script>
 </body>
 </html>
