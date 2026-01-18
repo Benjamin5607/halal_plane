@@ -1,40 +1,29 @@
 // ai_brain.js
-// 아미나의 지능(RAG)을 담당하는 모듈입니다.
+// 아미나의 지능(RAG + General Knowledge)을 담당하는 모듈
 
 export class AIBrain {
     constructor(apiKey, translations) {
         this.apiKey = apiKey;
-        this.t = translations; // 현재 언어 설정
+        this.t = translations;
         this.models = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
     }
 
-    // 🔍 [RAG 핵심] 질문과 관련된 장소만 DB에서 뽑아내기
+    // 🔍 [RAG] 질문과 관련된 장소만 DB에서 뽑아내기
     getRelevantPlaces(query, db, country) {
         if (!query) return [];
         const keywords = query.toLowerCase().split(" ");
         const candidates = db[country] || [];
         
-        // 검색어와 일치하는(이름, 설명, 카테고리) 장소 찾기
+        // 검색어와 일치하는 장소 찾기
         let relevant = candidates.filter(p => {
             const content = (
-                (p.name || "") + " " + 
-                (p.name_ko || "") + " " + 
-                (p.category || "") + " " + 
-                (p.label || "") + " " + 
-                (p.desc_ko || "") + " " + 
-                (p.desc_en || "")
+                (p.name || "") + " " + (p.name_ko || "") + " " + 
+                (p.category || "") + " " + (p.desc_ko || "") + " " + (p.desc_en || "")
             ).toLowerCase();
-            
-            // 키워드 중 하나라도 포함되면 관련 있는 것으로 간주
             return keywords.some(k => content.includes(k));
         });
 
-        // 결과가 너무 적으면 인기 장소(앞쪽 데이터) 약간 섞어주기 (아무말 방지)
-        if (relevant.length === 0) {
-            return candidates.slice(0, 5);
-        }
-        
-        // 토큰 절약을 위해 상위 10개만 리턴
+        // 🚨 중요: 관련 없는 데이터를 억지로 넣지 않음 (빈 배열이면 빈 대로 리턴)
         return relevant.slice(0, 10);
     }
 
@@ -42,56 +31,74 @@ export class AIBrain {
     async ask(query, history, db, country, userLoc) {
         if (!this.apiKey || this.apiKey.includes("PLACEHOLDER")) return "🔑 Please set API Key first.";
 
-        // 1. 질문과 관련된 장소만 추리기 (RAG)
+        // 1. DB 검색
         const relevantPlaces = this.getRelevantPlaces(query, db, country);
         
-        // 2. AI에게 먹여줄 데이터 요약 (이름, 카테고리, 특징만)
-        const contextStr = relevantPlaces.map(p => 
-            `- [${p.name} / ${p.name_ko || p.name}] (${p.category}): ${p.desc_en || p.desc_ko || "No desc"}`
-        ).join("\n");
+        // 2. 컨텍스트 구성
+        let contextStr = "";
+        let mode = "EXTERNAL"; // 기본은 외부 지식 모드
 
-        // 3. 시스템 프롬프트 (페르소나 + 데이터 주입)
+        if (relevantPlaces.length > 0) {
+            mode = "DATABASE"; // DB 매칭 성공
+            contextStr = relevantPlaces.map(p => 
+                `- [${p.name}] (in DB): ${p.desc_en || p.desc_ko}`
+            ).join("\n");
+        } else {
+            contextStr = "No matching places found in our Halal Database.";
+        }
+
+        // 3. 시스템 프롬프트 (하이브리드 모드)
         const systemPrompt = `
         You are Amina, a witty Halal travel guide.
-        Current Language: ${this.t.ai}
-        User Location: ${userLoc ? userLoc.lat + "," + userLoc.lon : "Unknown"}
+        Current Mode: ${mode} (Database vs General Knowledge)
+        Current Country: ${country}
         
-        [SEARCH RESULTS FROM DATABASE]
+        [DATABASE SEARCH RESULTS]
         ${contextStr}
 
         [RULES]
-        1. ONLY recommend places from the [SEARCH RESULTS] list above. Do NOT hallucinate.
-        2. If the user asks for Chicken, find Chicken places in the list. Do NOT recommend Seafood.
-        3. If the list is empty or irrelevant, say "I couldn't find exactly that in our Halal list, but how about these?"
-        4. Always wrap place names in [ ]. Example: [Eid].
-        5. Keep it short, friendly, and helpful.
+        1. If [DATABASE SEARCH RESULTS] has items, recommend ONLY from there.
+        2. If [DATABASE SEARCH RESULTS] is empty, use your GENERAL KNOWLEDGE to recommend famous places.
+        3. 🚨 IMPORTANT: When recommending from GENERAL KNOWLEDGE (not in DB), add "(External)" after the name.
+           Example: [BHC Chicken Geoje] (External)
+        4. When recommending from DB, just use brackets. Example: [Eid]
+        5. If recommending External places, clarify: "It's not in our DB, but I searched online!"
+        6. Provide a short reason for recommendation.
         `;
 
-        // 4. API 호출
         const messages = [
             { role: "system", content: systemPrompt },
-            ...history.slice(-4), // 최근 대화 4개 기억
+            ...history.slice(-4),
             { role: "user", content: query }
         ];
 
         return await this._callGroq(messages);
     }
 
-    // 📝 상세 리뷰 생성
-    async writeReview(place, country) {
-        const prompt = `
-        Write a 5-line detailed Halal review for "${place.name} (${place.name_ko})" in ${country}.
-        Language: ${this.t.ai}
-        Context: ${place.desc_en || place.desc_ko}
-        Category: ${place.category}
+    // 📝 리뷰 생성 (DB용 vs 외부용 분기 처리)
+    async writeReview(placeName, country, isExternal = false, placeData = null) {
+        let prompt = "";
         
-        Structure:
-        1. What is this place?
-        2. Halal/Vegan Status
-        3. Best Menu or Feature
-        4. Atmosphere
-        5. Amina's Tip
-        `;
+        if (isExternal) {
+            // 외부 장소: AI의 일반 상식으로 리뷰 작성
+            prompt = `
+            User is interested in "${placeName}" in ${country}.
+            This place is NOT in our database.
+            Based on general fame/reviews of this place (or chain), write a brief 3-line guide.
+            1. What kind of food?
+            2. Halal Probability (Is it Pork-free? Seafood? Certified?) - Be honest if unsure.
+            3. Why is it famous?
+            Language: ${this.t.ai}
+            `;
+        } else {
+            // 내부 장소: DB 데이터 기반
+            prompt = `
+            Write a 5-line review for "${placeName}" in ${country}.
+            Data: ${placeData.desc_en || placeData.desc_ko}
+            Focus on Halal status and signature menu.
+            Language: ${this.t.ai}
+            `;
+        }
         
         return await this._callGroq([{role: "user", content: prompt}]);
     }
@@ -102,7 +109,7 @@ export class AIBrain {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${this.apiKey}` },
-                    body: JSON.stringify({ model: model, messages: messages, temperature: 0.5 }) // 온도를 낮춰서 정확도 향상
+                    body: JSON.stringify({ model: model, messages: messages, temperature: 0.7 })
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -110,6 +117,6 @@ export class AIBrain {
                 }
             } catch (e) { console.error(e); }
         }
-        return "Amina is praying (Network Error). Please try again.";
+        return "Amina is currently offline. Please try again.";
     }
 }
