@@ -334,8 +334,6 @@
             filtered.forEach(p => {
                 const isVisited = visitedPlaces.includes(p.name);
                 
-                // [Feature] Multi-language Description Support
-                // Checks for desc_en, desc_jp, etc. Fallback to desc_ko.
                 const langKey = currentLang.toLowerCase();
                 const desc = p[`desc_${langKey}`] || p.desc_ko || p.desc || "";
 
@@ -345,12 +343,15 @@
                     distHtml = `<span class="card-dist">(📍 ${dist}km)</span>`;
                 }
 
+                // 한국어 이름이 있으면 괄호 안에 표시 (색상 강조)
+                const nameKoHtml = p.name_ko ? `<span style="font-size:0.8em; color:#047857; margin-left:4px;">(${p.name_ko})</span>` : "";
+
                 const div = document.createElement('div');
                 div.className = `card ${isVisited ? 'visited' : ''}`;
                 div.innerHTML = `
                     ${isVisited ? '<div class="visited-badge">🏆 VISITED</div>' : ''}
                     <div class="card-header">
-                        <div class="card-name">${p.name} ${distHtml}</div>
+                        <div class="card-name">${p.name} ${nameKoHtml} ${distHtml}</div>
                         <div class="card-label">${p.label || p.category}</div>
                     </div>
                     <div class="card-desc">${desc}</div>
@@ -567,16 +568,17 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
             return (R * c).toFixed(1);
         }
-        function deg2rad(deg) { return deg * (Math.PI/180); }
-
-        // [Feature] Smart Map Link Generator
         function getMapLink(p, c) {
-            // 한국인 경우: 이름 + 주소(한글) 조합으로 네이버 검색
-            // 예: "이드 서울 용산구 우사단로 10길 67" -> 검색 적중률 100%
             if(c.includes("Korea") || c.includes("한국")) {
+                // 1순위: 한국어 상호 (가장 정확함)
+                if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
+                
+                // 2순위: 한글 주소 (상호가 없을 때)
+                if(p.address && /[가-힣]/.test(p.address)) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address);
+                
+                // 3순위: 영어 이름 + 주소
                 return "https://map.naver.com/p/search/" + encodeURIComponent(p.name + " " + p.address);
             }
-            // 해외인 경우 구글 지도
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
 
