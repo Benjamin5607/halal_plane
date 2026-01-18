@@ -99,6 +99,9 @@
         .chat-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
         .chat-send { padding: 0 20px; background: var(--theme); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
         
+        /* [Fix 5] Reco Btn CSS Added */
+        .reco-btn { margin-top: 8px; padding: 8px 12px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 12px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; }
+        
         /* Leaflet Custom */
         .leaflet-popup-content-wrapper { background: #1a1a1a; color: white; border: 1px solid var(--theme); }
         .leaflet-popup-content { margin: 10px; width: 200px !important; }
@@ -202,6 +205,7 @@
         let visitedPlaces = JSON.parse(localStorage.getItem('visitedPlaces') || '[]');
         let userLat = null, userLon = null;
         let mapInstance = null, detailMapInstance = null;
+        let markerLayer = null; // [Fix 4] Separate marker layer
         let chatHistory = [];
 
         // Constants
@@ -216,12 +220,15 @@
         // 🚀 1. INITIALIZATION
         // ==========================================
         window.onload = async () => {
-            if (!GROQ_API_KEY) {
+            // [Fix 1] Robust API Key Check
+            if (!GROQ_API_KEY || GROQ_API_KEY.includes("PLACEHOLDER")) {
                 const inputKey = prompt("Please enter your Groq API Key to start Halal Plane:");
                 if (inputKey) GROQ_API_KEY = inputKey;
                 else alert("Features relying on Amina (AI) will not work without an API Key.");
             }
+
             await loadData();
+            
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userLat = pos.coords.latitude;
@@ -288,16 +295,19 @@
         // ==========================================
         // 🎨 2. UI RENDERING
         // ==========================================
-        function nav(pageId, effect) {
+        // [Fix 2] Logic Improved Nav
+        function nav(pageId, effect = 'left') {
             document.querySelectorAll('.page').forEach(p => {
-                p.classList.remove('active');
-                if(!p.classList.contains('hidden-left') && !p.classList.contains('hidden-right') && !p.classList.contains('hidden-bottom')) {
-                    p.classList.add('hidden-left');
+                p.classList.remove('active', 'hidden-left', 'hidden-right', 'hidden-bottom');
+                if (p.id !== pageId) {
+                    // Push other pages to the default hidden side (left) or custom
+                    p.classList.add('hidden-left'); 
                 }
             });
             const target = document.getElementById(pageId);
             target.classList.remove('hidden-left', 'hidden-right', 'hidden-bottom');
             target.classList.add('active');
+            
             if(pageId === 'page-passport') renderPassport();
         }
 
@@ -307,6 +317,9 @@
             document.getElementById(`lang-${lang}`).classList.add('active');
             renderFilters();
             renderList();
+            
+            // If map is open, refresh markers for language change
+            if(mapInstance) initMap(); 
         }
 
         function renderFilters() {
@@ -334,7 +347,6 @@
             filtered.forEach(p => {
                 const isVisited = visitedPlaces.includes(p.name);
                 
-                // [Lang Support] Checks for desc_en, desc_jp, etc.
                 const langKey = currentLang.toLowerCase();
                 const desc = p[`desc_${langKey}`] || p.desc_ko || p.desc || "";
 
@@ -416,16 +428,24 @@
             document.getElementById('review-sub').innerText = country;
             document.getElementById('review-content').innerText = "Amina is analyzing Halal status... 🕌";
             
-            const place = PLACE_DB[country].find(p => p.name === name);
+            let place = null;
+            if (PLACE_DB[country]) {
+                place = PLACE_DB[country].find(p => p.name === name);
+            }
+            
+            // [Fix 3] Null Check for Map Button
+            document.getElementById('btn-open-map').onclick = () => {
+                if (place) window.open(getMapLink(place, country), '_blank');
+                else alert("Map location not found.");
+            };
+            document.getElementById('btn-stamp').onclick = () => markVisited(name);
+
             if(place && place.lat && place.lon) {
                 if(detailMapInstance) detailMapInstance.remove();
                 detailMapInstance = L.map('detail-map').setView([place.lat, place.lon], 16);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMapInstance);
                 L.marker([place.lat, place.lon]).addTo(detailMapInstance);
             }
-
-            document.getElementById('btn-open-map').onclick = () => window.open(getMapLink(place, country), '_blank');
-            document.getElementById('btn-stamp').onclick = () => markVisited(name);
 
             const context = place ? (place[`desc_${currentLang.toLowerCase()}`] || place.desc_ko || "") : "";
             const addr = place ? place.address : "";
@@ -445,6 +465,7 @@
             `;
 
             const reply = await callGroq([{role: "system", content: prompt}]);
+            // [Fix 6] InnerHTML used for formatting, keeping it as is per requirement
             document.getElementById('review-content').innerHTML = reply;
         }
 
@@ -496,31 +517,37 @@
         // ==========================================
         // 🗺️ 4. MAP & UTILS
         // ==========================================
+        // [Fix 4] Logic Improved InitMap with Layer Clearing
         function initMap() {
             if(!mapInstance) {
                 mapInstance = L.map('world-map').setView([20, 0], 2);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-                for(let c in PLACE_DB) {
-                    PLACE_DB[c].forEach(p => {
-                        if(p.lat && p.lon) {
-                            const langKey = currentLang.toLowerCase();
-                            const desc = (p[`desc_${langKey}`] || p.desc_ko || "").substring(0,50)+"...";
-                            
-                            const html = `
-                                <div style="font-size:13px;">
-                                    <b style="color:#10B981">${p.name}</b><br>
-                                    <span style="color:#666">${p.label}</span><br>
-                                    <div style="margin:5px 0;">${desc}</div>
-                                    <div style="display:flex; gap:5px;">
-                                        <button class="popup-btn" style="background:#10B981; color:white;" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${c}')">REVIEW</button>
-                                        <button class="popup-btn" style="background:#333; color:white;" onclick="window.open('${getMapLink(p, c)}', '_blank')">MAP</button>
-                                    </div>
+                markerLayer = L.layerGroup().addTo(mapInstance);
+            }
+            
+            // Clear existing markers before re-adding (avoids duplicates on lang switch)
+            markerLayer.clearLayers();
+
+            for(let c in PLACE_DB) {
+                PLACE_DB[c].forEach(p => {
+                    if(p.lat && p.lon) {
+                        const langKey = currentLang.toLowerCase();
+                        const desc = (p[`desc_${langKey}`] || p.desc_ko || "").substring(0,50)+"...";
+                        
+                        const html = `
+                            <div style="font-size:13px;">
+                                <b style="color:#10B981">${p.name}</b><br>
+                                <span style="color:#666">${p.label}</span><br>
+                                <div style="margin:5px 0;">${desc}</div>
+                                <div style="display:flex; gap:5px;">
+                                    <button class="popup-btn" style="background:#10B981; color:white;" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${c}')">REVIEW</button>
+                                    <button class="popup-btn" style="background:#333; color:white;" onclick="window.open('${getMapLink(p, c)}', '_blank')">MAP</button>
                                 </div>
-                            `;
-                            L.marker([p.lat, p.lon]).addTo(mapInstance).bindPopup(html);
-                        }
-                    });
-                }
+                            </div>
+                        `;
+                        L.marker([p.lat, p.lon]).addTo(markerLayer).bindPopup(html);
+                    }
+                });
             }
         }
 
@@ -574,11 +601,8 @@
         // [Feature] Smart Map Link Generator
         function getMapLink(p, c) {
             if(c.includes("Korea") || c.includes("한국")) {
-                // 1. Name_ko
                 if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
-                // 2. Address (Korean)
                 if(p.address && /[가-힣]/.test(p.address)) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address);
-                // 3. Fallback
                 return "https://map.naver.com/p/search/" + encodeURIComponent(p.name + " " + p.address);
             }
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
