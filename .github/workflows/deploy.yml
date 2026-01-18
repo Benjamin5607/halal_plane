@@ -1,0 +1,42 @@
+name: Deploy Halal Plane to Pages
+
+on:
+  push:
+    branches: ["main"]  # 마니아님의 메인 브랜치 이름 (main 또는 master)
+
+# 권한 설정 (배포를 위해 필요)
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject API Key
+        # 여기서 index.html 안의 플레이스홀더를 진짜 시크릿 키로 교체합니다.
+        run: |
+          sed -i 's/GROQ_KEY_PLACEHOLDER/${{ secrets.GROQ_KEY_PLACEHOLDER }}/g' index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
