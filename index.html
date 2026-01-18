@@ -571,20 +571,12 @@
 
         // [Feature] Smart Map Link Generator
         function getMapLink(p, c) {
+            // 한국인 경우: 이름 + 주소(한글) 조합으로 네이버 검색
+            // 예: "이드 서울 용산구 우사단로 10길 67" -> 검색 적중률 100%
             if(c.includes("Korea") || c.includes("한국")) {
-                // 1. If address_ko exists in sheet, use it (Best)
-                if(p.address_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address_ko);
-                
-                // 2. If not, try reversing English address: "Street, District, City" -> "City District Street"
-                if(p.address) {
-                    const reversedAddr = p.address.split(',').reverse().join(' ').trim();
-                    return "https://map.naver.com/p/search/" + encodeURIComponent(reversedAddr);
-                }
-                
-                // 3. Last resort: Name
-                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name);
+                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name + " " + p.address);
             }
-            // For other countries (Google Maps)
+            // 해외인 경우 구글 지도
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
 
