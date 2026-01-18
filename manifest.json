@@ -1,0 +1,21 @@
+{
+  "name": "Halal Plane",
+  "short_name": "HalalPlane",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#10B981",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "amina.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "amina.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
