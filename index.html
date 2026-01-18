@@ -191,7 +191,6 @@
         // ⚙️ 0. CONFIGURATION & DATA
         // ==========================================
         
-        // 🔥 [중요] 여기에 API 키를 입력하면 친구들이 입력할 필요가 없습니다. (배포시 주의)
         let GROQ_API_KEY = "GROQ_KEY_PLACEHOLDER";
         const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTNTKjVwyPYpXBkAux_dPlqV6V2QMAe-uXcH0kkS0e9VQxKABasjiNT0smYJiogQ6oOM1vpxZ3bPz0a/pub?output=csv";
 
@@ -217,17 +216,12 @@
         // 🚀 1. INITIALIZATION
         // ==========================================
         window.onload = async () => {
-            // Check API Key
             if (!GROQ_API_KEY) {
                 const inputKey = prompt("Please enter your Groq API Key to start Halal Plane:");
                 if (inputKey) GROQ_API_KEY = inputKey;
                 else alert("Features relying on Amina (AI) will not work without an API Key.");
             }
-
-            // Fetch Data
             await loadData();
-            
-            // Get GPS
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userLat = pos.coords.latitude;
@@ -242,14 +236,11 @@
                 const res = await fetch(SHEET_CSV_URL);
                 const text = await res.text();
                 
-                // [수정된 파싱 로직] 자바스크립트 호환 Regex 사용
                 const rows = text.split('\n').map(row => {
                     if (!row.trim()) return [];
-                    // 콤마로 나누되, 따옴표("") 안의 콤마는 무시하는 정규식
                     const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
                     return row.split(regex).map(cell => {
                         let val = cell.trim();
-                        // 양끝 따옴표 제거 및 이중 따옴표 처리
                         if (val.startsWith('"') && val.endsWith('"')) {
                             val = val.slice(1, -1);
                         }
@@ -258,9 +249,7 @@
                 });
 
                 const headers = rows[0].map(h => h.trim());
-                
-                // 데이터 매핑 (기존 로직 유지)
-                PLACE_DB = {}; // 초기화
+                PLACE_DB = {}; 
                 for(let i=1; i<rows.length; i++) {
                     if(rows[i].length < headers.length) continue;
                     let obj = {};
@@ -276,9 +265,8 @@
                     }
                 }
                 
-                // Init Country Select
                 const select = document.getElementById('country-select');
-                select.innerHTML = ""; // 기존 옵션 초기화
+                select.innerHTML = "";
                 Object.keys(PLACE_DB).sort().forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c; opt.innerText = c;
@@ -304,14 +292,12 @@
             document.querySelectorAll('.page').forEach(p => {
                 p.classList.remove('active');
                 if(!p.classList.contains('hidden-left') && !p.classList.contains('hidden-right') && !p.classList.contains('hidden-bottom')) {
-                    p.classList.add('hidden-left'); // default hide
+                    p.classList.add('hidden-left');
                 }
             });
-            
             const target = document.getElementById(pageId);
             target.classList.remove('hidden-left', 'hidden-right', 'hidden-bottom');
             target.classList.add('active');
-
             if(pageId === 'page-passport') renderPassport();
         }
 
@@ -347,9 +333,13 @@
 
             filtered.forEach(p => {
                 const isVisited = visitedPlaces.includes(p.name);
-                const desc = p[`desc_${currentLang.toLowerCase()}`] || p.desc_ko || "";
-                let distHtml = "";
                 
+                // [Feature] Multi-language Description Support
+                // Checks for desc_en, desc_jp, etc. Fallback to desc_ko.
+                const langKey = currentLang.toLowerCase();
+                const desc = p[`desc_${langKey}`] || p.desc_ko || p.desc || "";
+
+                let distHtml = "";
                 if(userLat && userLon && p.lat && p.lon) {
                     const dist = calcDist(userLat, userLon, p.lat, p.lon);
                     distHtml = `<span class="card-dist">(📍 ${dist}km)</span>`;
@@ -376,16 +366,12 @@
         function renderPassport() {
             const grid = document.getElementById('stamp-grid');
             grid.innerHTML = '';
-            
-            // 1. Visited (Latest first)
             [...visitedPlaces].reverse().forEach(name => {
                 const el = document.createElement('div');
                 el.className = 'stamp active';
                 el.innerHTML = `<div class="stamp-icon">🥩</div><div>${name}</div>`;
                 grid.appendChild(el);
             });
-
-            // 2. Unvisited
             for(let c in PLACE_DB) {
                 PLACE_DB[c].forEach(p => {
                     if(!visitedPlaces.includes(p.name)) {
@@ -404,7 +390,7 @@
         const ZOMBIE_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
 
         async function callGroq(messages) {
-            if(!GROQ_API_KEY) return "Please set your API Key first.";
+            if(!GROQ_API_KEY || GROQ_API_KEY.includes("PLACEHOLDER")) return "Please set your API Key in GitHub Secrets.";
             
             for (let model of ZOMBIE_MODELS) {
                 try {
@@ -413,10 +399,8 @@
                         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
                         body: JSON.stringify({ model: model, messages: messages, temperature: 0.7 })
                     });
-
-                    if(res.status === 429) { await new Promise(r => setTimeout(r, 1000)); continue; } // Retry on limit
+                    if(res.status === 429) { await new Promise(r => setTimeout(r, 1000)); continue; }
                     if(!res.ok) throw new Error(res.status);
-                    
                     const data = await res.json();
                     return data.choices[0].message.content;
                 } catch(e) { continue; }
@@ -430,7 +414,6 @@
             document.getElementById('review-sub').innerText = country;
             document.getElementById('review-content').innerText = "Amina is analyzing Halal status... 🕌";
             
-            // Render Mini Map
             const place = PLACE_DB[country].find(p => p.name === name);
             if(place && place.lat && place.lon) {
                 if(detailMapInstance) detailMapInstance.remove();
@@ -439,11 +422,9 @@
                 L.marker([place.lat, place.lon]).addTo(detailMapInstance);
             }
 
-            // Buttons Logic
             document.getElementById('btn-open-map').onclick = () => window.open(getMapLink(place, country), '_blank');
             document.getElementById('btn-stamp').onclick = () => markVisited(name);
 
-            // AI Generation
             const context = place ? (place[`desc_${currentLang.toLowerCase()}`] || place.desc_ko || "") : "";
             const addr = place ? place.address : "";
             
@@ -469,31 +450,23 @@
             const input = document.getElementById('chat-msg-input');
             const txt = input.value.trim();
             if(!txt) return;
-            
             addChatBubble(txt, 'user');
             input.value = '';
             chatHistory.push({role: "user", content: txt});
 
-            // Context Compression
             let dbContext = "PLACES: " + Object.values(PLACE_DB).flat().map(p => p.name).join(", ");
             if(dbContext.length > 5000) dbContext = dbContext.substring(0, 5000);
-            
             let gpsContext = (userLat) ? `GPS: ${userLat}, ${userLon}` : "No GPS";
 
             const sysPrompt = `
             You are Amina, a Halal guide. Speak ONLY in ${TRANSLATIONS[currentLang].ai}.
             [DATA] ${dbContext}
             [GPS] ${gpsContext}
-            RULES:
-            1. Recommend Halal places.
-            2. Output place names in [BRACKETS] e.g. [Eid].
+            RULES: 1. Recommend Halal places. 2. Output place names in [BRACKETS] e.g. [Eid].
             `;
 
             const reply = await callGroq([{role: "system", content: sysPrompt}, ...chatHistory.slice(-4)]);
-            
-            // Button Parsing
             let fmtReply = reply.replace(/\[(.*?)\]/g, (match, p1) => {
-                // Find country for the place
                 let foundC = "";
                 for(let c in PLACE_DB) {
                     if(PLACE_DB[c].find(p => p.name.includes(p1))) { foundC = c; break; }
@@ -501,7 +474,6 @@
                 if(foundC) return `<br><button class="reco-btn" onclick="openReview('${p1.replace(/'/g, "\\'")}', '${foundC}')">📍 ${p1}</button>`;
                 return match;
             });
-
             addChatBubble(fmtReply, 'bot', true);
             chatHistory.push({role: "assistant", content: reply});
         }
@@ -526,12 +498,13 @@
             if(!mapInstance) {
                 mapInstance = L.map('world-map').setView([20, 0], 2);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-                
-                // Add Markers
                 for(let c in PLACE_DB) {
                     PLACE_DB[c].forEach(p => {
                         if(p.lat && p.lon) {
-                            const desc = (p[`desc_${currentLang.toLowerCase()}`] || p.desc_ko || "").substring(0,50)+"...";
+                            // [Fix] Map Popup Desc also follows language
+                            const langKey = currentLang.toLowerCase();
+                            const desc = (p[`desc_${langKey}`] || p.desc_ko || "").substring(0,50)+"...";
+                            
                             const html = `
                                 <div style="font-size:13px;">
                                     <b style="color:#10B981">${p.name}</b><br>
@@ -554,13 +527,11 @@
             const q = document.getElementById('map-input').value.toLowerCase();
             if(!q) return;
             let found = false;
-            // Search Country Logic
             for(let c in PLACE_DB) {
                 if(c.toLowerCase().includes(q) && PLACE_DB[c][0].lat) {
                     mapInstance.setView([PLACE_DB[c][0].lat, PLACE_DB[c][0].lon], 12);
                     found = true; break;
                 }
-                // Search Place
                 for(let p of PLACE_DB[c]) {
                     const str = (p.name + " " + p.address + " " + p.desc_ko).toLowerCase();
                     if(str.includes(q) && p.lat) {
@@ -584,13 +555,10 @@
                 visitedPlaces.push(name);
                 localStorage.setItem('visitedPlaces', JSON.stringify(visitedPlaces));
                 alert("✈️ Stamped on Passport!");
-                renderList(); // Update Golden Border immediately
-            } else {
-                alert("Already visited!");
-            }
+                renderList(); 
+            } else { alert("Already visited!"); }
         }
 
-        // Helper
         function calcDist(lat1, lon1, lat2, lon2) {
             const R = 6371; 
             const dLat = deg2rad(lat2-lat1);
@@ -600,8 +568,23 @@
             return (R * c).toFixed(1);
         }
         function deg2rad(deg) { return deg * (Math.PI/180); }
+
+        // [Feature] Smart Map Link Generator
         function getMapLink(p, c) {
-            if(c.includes("Korea") || c.includes("한국")) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address || p.name);
+            if(c.includes("Korea") || c.includes("한국")) {
+                // 1. If address_ko exists in sheet, use it (Best)
+                if(p.address_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address_ko);
+                
+                // 2. If not, try reversing English address: "Street, District, City" -> "City District Street"
+                if(p.address) {
+                    const reversedAddr = p.address.split(',').reverse().join(' ').trim();
+                    return "https://map.naver.com/p/search/" + encodeURIComponent(reversedAddr);
+                }
+                
+                // 3. Last resort: Name
+                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name);
+            }
+            // For other countries (Google Maps)
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
 
