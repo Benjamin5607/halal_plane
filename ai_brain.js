@@ -1,5 +1,5 @@
 // ai_brain.js
-// 아미나의 지능 (Global Search + RAG + Halal Guard)
+// 아미나의 지능 (GPS Proximity + Global Search)
 
 export class AIBrain {
     constructor(apiKey, translations) {
@@ -8,22 +8,35 @@ export class AIBrain {
         this.models = ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
     }
 
-    // 🔍 [Global RAG] 전 세계 DB에서 검색 (국경 초월)
-    getRelevantPlaces(query, db, currentCountry) {
+    // 📏 거리 계산 (Haversine Formula)
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 99999; // 좌표 없으면 아주 먼 곳으로 취급
+        const R = 6371; // 지구 반지름 (km)
+        const dLat = (lat2 - lat1) * (Math.PI / 180);
+        const dLon = (lon2 - lon1) * (Math.PI / 180);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // 거리 (km)
+    }
+
+    // 🔍 [Smart Search] GPS 위치와 검색어 기반 탐색
+    getRelevantPlaces(query, db, userLoc) {
         if (!query) return [];
         const keywords = query.toLowerCase().split(" ");
-        
         let allCandidates = [];
 
-        // 1. 모든 국가의 데이터를 평탄화(Flatten)하여 하나의 리스트로 만듦
-        // 데이터에 'origin_country' 속성을 임시로 추가해서 어디 건지 알게 함
+        // 1. 모든 국가 데이터를 하나로 통합 (국경 없애기)
         Object.keys(db).forEach(country => {
             db[country].forEach(place => {
-                allCandidates.push({ ...place, origin_country: country });
+                // 내 위치가 있으면 거리 계산, 없으면 0
+                let dist = userLoc ? this.calculateDistance(userLoc.lat, userLoc.lon, place.lat, place.lon) : 0;
+                allCandidates.push({ ...place, origin_country: country, distance: dist });
             });
         });
 
-        // 2. 검색 및 점수 매기기 (Scoring System)
+        // 2. 점수 매기기 (검색어 일치 + 거리 점수)
         let scored = allCandidates.map(p => {
             let score = 0;
             const content = (
@@ -32,29 +45,36 @@ export class AIBrain {
                 (p.address || "") + " " + (p.origin_country || "")
             ).toLowerCase();
 
-            // 키워드 매칭 점수
+            // (A) 검색어 매칭 점수
+            let keywordMatch = false;
             keywords.forEach(k => {
-                if (content.includes(k)) score += 1;
-                // 국가나 도시 이름이 일치하면 가산점 (명동, 서울, Korea 등)
-                if ((p.address && p.address.toLowerCase().includes(k)) || 
-                    (p.origin_country.toLowerCase().includes(k))) {
-                    score += 3; // 강력한 가산점!
+                if (content.includes(k)) {
+                    score += 10; // 키워드 맞으면 높은 점수
+                    keywordMatch = true;
                 }
             });
 
-            return { place: p, score: score };
+            // (B) 거리 점수 (키워드가 지역명이 아닐 때 유용)
+            // 5km 이내면 가산점, 20km 이내면 소폭 가산
+            if (userLoc && p.distance < 5) score += 20; 
+            else if (userLoc && p.distance < 20) score += 10;
+            else if (userLoc && p.distance < 100) score += 5;
+
+            // (C) 만약 검색어가 명확한 지명(Seoul, Tokyo 등)이라면 거리 점수 무시 가능
+            // (AI가 판단하도록 정보만 넘김)
+
+            return { place: p, score: score, match: keywordMatch };
         });
 
-        // 3. 점수 높은 순 정렬 및 필터링 (점수 0점은 제외)
+        // 3. 정렬: 점수 높은 순 -> 거리 가까운 순
         let relevant = scored
-            .filter(item => item.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .map(item => item.place);
-
-        // 4. 결과가 너무 많으면 상위 10개만, 만약 결과가 없으면 '현재 국가' 데이터에서 3개 정도 랜덤 추천 (fallback)
-        if (relevant.length === 0 && db[currentCountry]) {
-            return []; // 아예 없으면 외부 검색(External)으로 유도하기 위해 빈 배열 반환
-        }
+            .filter(item => item.score > 0) // 관련 있는 것만
+            .sort((a, b) => b.score - a.score || a.place.distance - b.place.distance)
+            .map(item => {
+                // AI에게 줄 정보에 '거리' 정보 추가
+                let distInfo = userLoc ? `(${item.place.distance.toFixed(1)}km away)` : "";
+                return { ...item.place, distInfo: distInfo };
+            });
 
         return relevant.slice(0, 10);
     }
@@ -63,47 +83,47 @@ export class AIBrain {
     async ask(query, history, db, currentCountry, userLoc) {
         if (!this.apiKey || this.apiKey.includes("PLACEHOLDER")) return "🔑 Please set API Key first.";
 
-        // 글로벌 검색 실행
-        const relevantPlaces = this.getRelevantPlaces(query, db, currentCountry);
+        // 스마트 검색 실행 (GPS 정보 전달)
+        const relevantPlaces = this.getRelevantPlaces(query, db, userLoc);
         
-        // 컨텍스트 구성
         let contextStr = "";
         let mode = "EXTERNAL"; 
 
         if (relevantPlaces.length > 0) {
             mode = "DATABASE"; 
-            // 🔥 중요: 데이터 줄 때 [국가/도시] 정보를 꼭 같이 줌
+            // 🔥 AI에게 [거리 정보]와 [국가 정보]를 같이 줌
             contextStr = relevantPlaces.map(p => 
-                `- [${p.name}] (${p.origin_country}, ${p.address}): ${p.desc_en || p.desc_ko}`
+                `- [${p.name}] (${p.origin_country}, ${p.address}) ${p.distInfo || ""}: ${p.desc_en || p.desc_ko}`
             ).join("\n");
         } else {
-            contextStr = "No direct match in Halal DB.";
+            contextStr = "No direct match in DB.";
         }
 
-        // 시스템 프롬프트 (위치 검증 로직 강화)
+        // 🚨 [시스템 프롬프트] 지도 선택 무시하고 GPS와 질문만 따르도록 지시
         const systemPrompt = `
-        You are Amina, a witty Halal travel guide.
-        Current User Location/Map: ${currentCountry}
-        User Query: "${query}"
+        You are Amina, a smart Halal travel guide.
         
-        [DATABASE SEARCH RESULTS]
+        [USER CONTEXT]
+        - Query: "${query}"
+        - User's GPS Location: ${userLoc ? `Lat ${userLoc.lat}, Lon ${userLoc.lon}` : "Unknown"}
+        - Currently Viewed Map: ${currentCountry} (IGNORE this if it conflicts with Query or GPS)
+
+        [SEARCH RESULTS FROM DB]
         ${contextStr}
 
-        [CRITICAL RULES]
-        1. 📍 **LOCATION CHECK (Most Important):** - Check the User Query for location keywords (e.g., "Seoul", "Tokyo", "Myeongdong").
-           - Check the [DATABASE SEARCH RESULTS] for their 'origin_country' and 'address'.
-           - **ONLY recommend places that match the requested location.**
-           - IF the user asks for "Seoul" but the DB results are in "Tokyo", ignore the DB results and use your General Knowledge (External).
-           - IF the user asks for "Seoul" and the DB result is in "Seoul", recommend it confidently.
+        [DECISION RULES]
+        1. 🎯 **LOCATION PRIORITY:**
+           - **Rule A (Explicit Request):** If the user asks for a specific place (e.g., "Seoul", "Busan"), ONLY recommend places in that region. Ignore the User's GPS and Viewed Map.
+           - **Rule B (Nearby Request):** If the user asks "Near me", "Around here", or just "Chicken" (without location), recommend the CLOSEST places based on the 'km away' info in [SEARCH RESULTS].
+           - **Rule C (Conflict):** If User is in Korea (GPS) but viewing Japan Map, and asks "Best food nearby", recommend KOREAN food (GPS wins).
 
         2. 🚨 **HARAM CHECK:**
-           - If user asks for Pork/Alcohol/Bacon, warn them it is NOT Halal. 
-           - Suggest Halal alternatives (e.g., "Beef BBQ" instead of "Pork Belly").
+           - Strict warning on Pork/Alcohol. Suggest Halal alternatives.
 
         3. **FORMAT:**
-           - If recommending from DB: [Place Name]
-           - If recommending from General Knowledge: [Place Name] (External)
-           - Keep it short and helpful.
+           - Recommended: [Place Name]
+           - External Knowledge: [Place Name] (External)
+           - Mention distance if available (e.g., "It's just 2km away!").
         `;
 
         const messages = [
@@ -115,17 +135,17 @@ export class AIBrain {
         return await this._callGroq(messages);
     }
 
-    // 📝 리뷰 생성
+    // 📝 리뷰 생성 (기존 유지)
     async writeReview(placeName, country, isExternal = false, placeData = null) {
         let prompt = "";
         if (isExternal) {
             prompt = `
             User is interested in "${placeName}" in ${country}.
             This place is NOT in our database.
-            Based on general fame, write a brief 3-line guide.
-            1. What kind of food?
-            2. Halal Probability (Is it Pork-free? Seafood?) - Be honest.
-            3. Why is it famous?
+            Write a brief 3-line guide based on general knowledge.
+            1. Food Type?
+            2. Halal Status? (Honest guess)
+            3. Why famous?
             Language: ${this.t.ai}
             `;
         } else {
