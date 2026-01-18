@@ -560,25 +560,38 @@
             } else { alert("Already visited!"); }
         }
 
+        // ==========================================
+        // 🧩 Helper Functions (여기 deg2rad가 꼭 있어야 해요!)
+        // ==========================================
+        
+        // 거리 계산 함수 (여기서 deg2rad를 호출함)
         function calcDist(lat1, lon1, lat2, lon2) {
-            const R = 6371; 
-            const dLat = deg2rad(lat2-lat1);
-            const dLon = deg2rad(lon2-lon1); 
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            const R = 6371; // 지구 반지름 (km)
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return (R * c).toFixed(1);
         }
+
+        // [이 친구가 없어서 에러가 났던 겁니다!]
+        function deg2rad(deg) { 
+            return deg * (Math.PI / 180); 
+        }
+
+        // [수정 완료된] 지도 링크 생성 함수 (한국어 상호 우선)
         function getMapLink(p, c) {
             if(c.includes("Korea") || c.includes("한국")) {
-                // 1순위: 한국어 상호 (가장 정확함)
+                // 1. 한국어 상호 (가장 정확)
                 if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
-                
-                // 2순위: 한글 주소 (상호가 없을 때)
+                // 2. 한글 주소
                 if(p.address && /[가-힣]/.test(p.address)) return "https://map.naver.com/p/search/" + encodeURIComponent(p.address);
-                
-                // 3순위: 영어 이름 + 주소
+                // 3. 기본
                 return "https://map.naver.com/p/search/" + encodeURIComponent(p.name + " " + p.address);
             }
+            // 해외 (구글 지도)
             return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
 
