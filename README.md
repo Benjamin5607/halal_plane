@@ -26,7 +26,7 @@ A Progressive Web App (PWA) for Muslim travelers to discover Halal restaurants, 
 | Layer | Technology |
 |-------|------------|
 | **Frontend** | Vanilla HTML5, CSS3, JavaScript (ES Modules) — no build step required |
-| **Maps** | [Leaflet.js 1.9.4](https://leafletjs.com/) + [OpenStreetMap](https://www.openstreetmap.org/) tiles |
+| **Maps** | [Leaflet.js 1.9.4](https://leafletjs.com/) + OpenStreetMap tiles; external links via Google Maps, Naver Map (Korea), or Baidu Maps (China) |
 | **AI** | [Groq Cloud API](https://console.groq.com/) — dynamic model discovery via `/v1/models`, random assignment from suitable chat models, automatic fallback on failure |
 | **Data Store** | Google Sheets (published CSV) + Google Apps Script Web App |
 | **Backend Scripts** | Google Apps Script (`gas/Code.gs`) — data proxy, place requests, AI mining & auditing |
@@ -90,6 +90,18 @@ halal_plane/
 ### 5. Save a New Place
 - When Amina suggests an external place, tap **Save to Database**.
 - The request is sent to Google Apps Script and queued in the **Candidates** sheet for AI review.
+
+### Map Links (by country)
+
+Database places open in the most accurate map app for each region:
+
+| Region | Map Provider | Link strategy |
+|--------|--------------|---------------|
+| **Korea** | Naver Map | Name + address search, map centered near DB coordinates |
+| **China** | Baidu Maps | Name + address search near BD-09 converted coordinates |
+| **Other** | Google Maps | Name + address search, map centered near DB coordinates |
+
+Coordinates are used only to **bias the search area** — the link always searches by restaurant name and address so the map app can match the correct POI.
 
 ### Navigation
 Every sub-page (Passport, Map, Chat, Detail) has:

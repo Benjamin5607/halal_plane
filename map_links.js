@@ -1,4 +1,4 @@
-// map_links.js — precise map links by country (Google / Naver / Baidu)
+// map_links.js — map links by country (name/address search, coord-biased)
 
 export function isKorea(country = "") {
     const value = String(country).toLowerCase();
@@ -26,54 +26,70 @@ export function wgs84ToBd09(lat, lon) {
     return [bdLat, bdLng];
 }
 
+/** Build the richest possible text query from DB fields (never raw coordinates). */
+export function buildSearchQuery(place = {}, country = "") {
+    const parts = [];
+
+    if (place.name_ko) parts.push(String(place.name_ko).trim());
+    if (place.name && place.name !== place.name_ko) parts.push(String(place.name).trim());
+    if (place.address) parts.push(String(place.address).trim());
+
+    if (!place.address && country) parts.push(String(country).trim());
+
+    const query = parts.filter(Boolean).join(" ");
+    return query || String(place.name || country || "restaurant").trim();
+}
+
 function buildGoogleLink(place, country) {
+    const query = buildSearchQuery(place, country);
+
     if (hasValidCoords(place)) {
         const lat = parseFloat(place.lat);
         const lon = parseFloat(place.lon);
-        return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+        // Search by name/address, map centered near DB coordinates
+        return `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${lat},${lon},17z`;
     }
 
-    const query = [place.address, place.name, country].filter(Boolean).join(", ");
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
-function buildNaverLink(place) {
+function buildNaverLink(place, country) {
+    const query = buildSearchQuery(place, country);
+
     if (hasValidCoords(place)) {
         const lat = parseFloat(place.lat);
         const lon = parseFloat(place.lon);
-        const title = encodeURIComponent(place.name_ko || place.name || "Place");
-        return `https://map.naver.com/?lng=${lon}&lat=${lat}&title=${title}&zoom=17`;
+        // v5 search with map center at DB coordinates
+        return `https://map.naver.com/v5/search/${encodeURIComponent(query)}?c=${lon},${lat},17,0,0,0,dh`;
     }
 
-    const query = place.name_ko || place.name || place.address;
     return `https://map.naver.com/p/search/${encodeURIComponent(query)}`;
 }
 
 function buildBaiduLink(place, country) {
+    const query = buildSearchQuery(place, country);
+
     if (hasValidCoords(place)) {
         const lat = parseFloat(place.lat);
         const lon = parseFloat(place.lon);
         const [bdLat, bdLng] = wgs84ToBd09(lat, lon);
-        const title = encodeURIComponent(place.name_ko || place.name || "Place");
-        const content = encodeURIComponent([place.address, country].filter(Boolean).join(", "));
-        return `https://api.map.baidu.com/marker?location=${bdLat},${bdLng}&title=${title}&content=${content}&output=html&src=halalplane`;
+        // Search by name/address near converted BD-09 coordinates
+        return `https://map.baidu.com/search/${encodeURIComponent(query)}/@${bdLng},${bdLat},19z`;
     }
 
-    const query = [place.name, place.name_ko, place.address, country].filter(Boolean).join(" ");
     return `https://map.baidu.com/search/${encodeURIComponent(query)}/`;
 }
 
 export function buildMapLink(place, country = "") {
     const resolvedCountry = country || place.Country || place.origin_country || "";
 
-    if (isKorea(resolvedCountry)) return buildNaverLink(place);
+    if (isKorea(resolvedCountry)) return buildNaverLink(place, resolvedCountry);
     if (isChina(resolvedCountry)) return buildBaiduLink(place, resolvedCountry);
     return buildGoogleLink(place, resolvedCountry);
 }
 
 export function buildExternalMapLink(name, country = "") {
-    const place = { name, address: "" };
-    return buildMapLink(place, country);
+    return buildMapLink({ name, address: "" }, country);
 }
 
 export function getMapProvider(country = "") {
@@ -97,25 +113,23 @@ export function extractMapLinkLabel(url) {
         const parsed = new URL(url);
 
         if (parsed.hostname.includes("google.com")) {
+            const pathMatch = parsed.pathname.match(/\/maps\/search\/([^/@]+)/);
+            if (pathMatch) return decodeURIComponent(pathMatch[1].replace(/\+/g, " "));
+
             const query = parsed.searchParams.get("query");
-            if (query && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(query)) {
-                return null;
+            if (query && !/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(query)) {
+                return decodeURIComponent(query.replace(/\+/g, " "));
             }
-            if (query) return decodeURIComponent(query.replace(/\+/g, " "));
         }
 
         if (parsed.hostname.includes("naver.com")) {
-            const title = parsed.searchParams.get("title");
-            if (title) return decodeURIComponent(title);
+            const pathMatch = parsed.pathname.match(/\/(?:v5\/)?search\/([^/?]+)/);
+            if (pathMatch) return decodeURIComponent(pathMatch[1]);
         }
 
         if (parsed.hostname.includes("baidu.com")) {
-            const title = parsed.searchParams.get("title");
-            if (title) return decodeURIComponent(title);
-            const parts = parsed.pathname.split("/").filter(Boolean);
-            if (parts[0] === "search" && parts[1]) {
-                return decodeURIComponent(parts[1]);
-            }
+            const pathMatch = parsed.pathname.match(/\/search\/([^/@]+)/);
+            if (pathMatch) return decodeURIComponent(pathMatch[1]);
         }
     } catch (error) {
         console.warn(error);
@@ -124,4 +138,4 @@ export function extractMapLinkLabel(url) {
     return null;
 }
 
-export const MAP_URL_PATTERN = /https:\/\/(?:www\.)?(?:google\.com\/maps|map\.baidu\.com|api\.map\.baidu\.com)[^\s)\]"']+/gi;
+export const MAP_URL_PATTERN = /https:\/\/(?:www\.)?(?:google\.com\/maps|map\.baidu\.com|map\.naver\.com)[^\s)\]"']+/gi;
