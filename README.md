@@ -1,134 +1,236 @@
 # Halal Plane 🕌
 
-무슬림 여행자를 위한 할랄 맛집·기도실 가이드 PWA입니다.  
-GPS 기반 추천, AI 가이드 **Amina**, 세계 지도, 여권 스탬프 기능을 제공합니다.
+A Progressive Web App (PWA) for Muslim travelers to discover Halal restaurants, cafes, and mosques worldwide. Built around **Amina**, an AI Halal travel guide powered by Groq LLM, with GPS-based recommendations, an interactive world map, and a digital passport stamp feature.
 
 **Live Demo:** https://benjamin5607.github.io/halal_plane/
 
 ---
 
-## 주요 기능
+## Features
 
-| 기능 | 설명 |
-|------|------|
-| 🗺️ **장소 탐색** | Google Sheets DB 기반 할랄 식당·카페·모스크 목록 |
-| 🤖 **Amina AI** | Groq LLM 기반 할랄 여행 챗봇 및 장소 리뷰 |
-| 📍 **GPS 추천** | 현재 위치 기준 거리 표시 및 근처 장소 추천 |
-| 🎫 **여권 스탬프** | 방문한 장소를 로컬 스토리지에 기록 |
-| 🌐 **다국어** | 한국어 / English / 日本語 / 中文 지원 |
-| 📱 **PWA** | `manifest.json` 기반 모바일 홈 화면 추가 가능 |
+| Feature | Description |
+|---------|-------------|
+| 🗺️ **Place Explorer** | Browse Halal spots from a Google Sheets database, filterable by country and category |
+| 🤖 **Amina AI Guide** | Chat with a Halal travel guide that answers in your language (KO / EN / JP / CN) |
+| 📍 **GPS Recommendations** | Distance-based sorting and "near me" suggestions using your current location |
+| 📝 **AI Reviews** | One-tap Halal reviews for any place, with Google Maps links |
+| 🌍 **World Map** | Leaflet-powered map with markers for all listed places |
+| 🎫 **Passport Stamps** | Track visited places locally (stored in browser `localStorage`) |
+| ➕ **Community Requests** | Submit new places via Google Apps Script for AI review and database inclusion |
+| 📱 **PWA Ready** | Installable on mobile home screen via `manifest.json` |
 
 ---
 
-## 프로젝트 구조
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Vanilla HTML5, CSS3, JavaScript (ES Modules) — no build step required |
+| **Maps** | [Leaflet.js 1.9.4](https://leafletjs.com/) + [OpenStreetMap](https://www.openstreetmap.org/) tiles |
+| **AI** | [Groq Cloud API](https://console.groq.com/) — dynamic model discovery via `/v1/models`, random assignment from suitable chat models, automatic fallback on failure |
+| **Data Store** | Google Sheets (published CSV) + Google Apps Script Web App |
+| **Backend Scripts** | Google Apps Script (`gas/Code.gs`) — data proxy, place requests, AI mining & auditing |
+| **Hosting** | [GitHub Pages](https://pages.github.com/) |
+| **CI/CD** | GitHub Actions (`.github/workflows/deploy.yml`) — auto-deploy on push to `main` |
+| **Local Storage** | Browser `localStorage` for visited places and request history |
+
+### Supported Groq Models (auto-selected)
+
+The app discovers available models at runtime and excludes non-chat models (Whisper, Orpheus, Compound, etc.). Fallback list:
+
+- `llama-3.3-70b-versatile`
+- `llama-3.1-8b-instant`
+- `openai/gpt-oss-120b`
+- `openai/gpt-oss-20b`
+- `qwen/qwen3-32b`
+
+---
+
+## Project Structure
 
 ```
 halal_plane/
-├── index.html          # 메인 UI 및 앱 로직
-├── ai_brain.js         # Amina AI (Groq API 연동)
-├── gas/Code.gs         # Google Apps Script (데이터/요청 API)
-├── manifest.json       # PWA 설정
-├── amina.png           # 앱 아이콘 / Amina 버튼
-├── bg.png              # 배경 이미지
-└── .github/workflows/
-    └── deploy.yml      # GitHub Pages 자동 배포
+├── index.html              # Main UI, navigation, data loading, chat interface
+├── ai_brain.js             # Amina AI module (Groq API, GPS search, persona prompts)
+├── gas/
+│   └── Code.gs             # Google Apps Script — Web App API, mining, auto-auditor
+├── manifest.json           # PWA manifest (icons, theme, display mode)
+├── amina.png               # App icon & floating Amina chat button
+├── bg.png                  # Background image
+└── .github/
+    └── workflows/
+        └── deploy.yml      # GitHub Pages deployment + API key injection
 ```
 
 ---
 
-## 로컬 실행
+## How to Use
 
-ES Module을 사용하므로 **로컬 HTTP 서버**가 필요합니다.
+### 1. Home Screen
+- Select a **country** from the dropdown.
+- Filter by category: All, Asian, Western, Middle East, Cafe, Mosque.
+- Tap **AI REVIEW** for an Amina-generated Halal guide, or **MAP** to open directions.
+- Switch language with **KR / EN / JP / CN** buttons (top right).
+
+### 2. Amina AI Chat
+- Tap the **Amina floating button** (bottom right) to open the chat.
+- Ask anything — Amina always responds as a Halal travel guide in your selected language.
+- Place recommendations include a **reason** and a **Google Maps link**.
+- Tap a recommended place button to open a detailed AI review.
+
+### 3. World Map
+- Tap **Explore World** to view all places on an interactive map.
+- Search by name, or tap **◎** to jump to your GPS location.
+
+### 4. Passport
+- Tap **🎫** (top left) to view stamps for places you've visited.
+- Stamp a place from its detail page after an AI review.
+
+### 5. Save a New Place
+- When Amina suggests an external place, tap **Save to Database**.
+- The request is sent to Google Apps Script and queued in the **Candidates** sheet for AI review.
+
+### Navigation
+Every sub-page (Passport, Map, Chat, Detail) has:
+- **← Back** — return to the previous screen
+- **🏠 Home** — return to the main list
+
+---
+
+## Getting Started (Local Development)
+
+This project uses ES Modules, so you **must serve it over HTTP** (opening `index.html` directly via `file://` will not work).
+
+### Prerequisites
+- A modern browser (Chrome, Safari, Firefox, Edge)
+- A [Groq API Key](https://console.groq.com/) (`gsk_...`)
+- Python 3 or Node.js (for local server)
+
+### Run locally
 
 ```bash
-# Python 3
+# Clone the repository
+git clone https://github.com/Benjamin5607/halal_plane.git
+cd halal_plane
+
+# Option A: Python
 python3 -m http.server 8080
 
-# 또는 Node.js (npx)
+# Option B: Node.js
 npx serve .
 ```
 
-브라우저에서 `http://localhost:8080` 접속 후, Groq API Key 입력 프롬프트가 뜨면 키를 입력합니다.
+Open `http://localhost:8080` in your browser. When prompted, paste your Groq API Key.
 
-> API Key 발급: https://console.groq.com/
+### Configuration (`index.html`)
 
----
-
-## GitHub Pages 배포
-
-`main` 브랜치에 push하면 GitHub Actions가 자동으로 Pages에 배포합니다.
-
-### API Key 설정 (Secrets)
-
-Repository → **Settings → Secrets and variables → Actions** 에서:
-
-| Secret 이름 | 값 |
-|-------------|-----|
-| `GROQ_KEY_PLACEHOLDER` | Groq API Key (`gsk_...`) |
-
-배포 시 `index.html`의 `GROQ_KEY_PLACEHOLDER` 문자열이 자동으로 교체됩니다.
+| Constant | Description |
+|----------|-------------|
+| `GROQ_KEY_PLACEHOLDER` | Replaced at deploy time via GitHub Actions secret |
+| `SHEET_CSV_URL` | Published Google Sheets CSV URL |
+| `GAS_URL` | Google Apps Script Web App deployment URL |
 
 ---
 
-## 데이터 소스
+## Deployment (GitHub Pages)
 
-장소 데이터는 아래 순서로 로드됩니다.
+Pushing to the `main` branch triggers automatic deployment via GitHub Actions.
 
-1. **Google Sheets CSV** (기본) — 재시도 + 캐시 무효화 적용
-2. **Google Apps Script** (`?action=data`) — CSV 실패 시 fallback
+### 1. Set GitHub Secret
 
-새 장소 추가 요청은 **Save to Database** 버튼 → Google Apps Script (`action=add`)로 전송됩니다.
+Go to **Repository → Settings → Secrets and variables → Actions**:
 
-### Google Apps Script 배포 (필수)
+| Secret Name | Value |
+|-------------|-------|
+| `GROQ_KEY_PLACEHOLDER` | Your Groq API Key (`gsk_...`) |
 
-현재 배포된 Web App에 `doGet` / `doPost`가 없으면 데이터 fallback과 저장 요청이 실패합니다.
+The deploy workflow replaces `GROQ_KEY_PLACEHOLDER` in `index.html` before uploading to Pages.
 
-1. Google Sheet → **Extensions → Apps Script**
-2. `gas/Code.gs` 내용 붙여넣기
-3. Groq API Key 설정 (둘 중 하나)
-   - **권장:** `setGroqApiKeyOnce()` 함수에 키 입력 후 1회 실행 → 함수에서 키 문자열 삭제
-   - 또는 `GROQ_API_KEY` 상수에 직접 입력
+### 2. Enable GitHub Pages
+
+Go to **Repository → Settings → Pages** and set the source to **GitHub Actions**.
+
+---
+
+## Google Apps Script Setup
+
+The Web App provides a data fallback and handles user place requests. It also runs server-side AI mining and auditing.
+
+### Deploy Steps
+
+1. Open your Google Sheet → **Extensions → Apps Script**
+2. Paste the contents of [`gas/Code.gs`](gas/Code.gs)
+3. Set your Groq API Key (choose one):
+   - **Recommended:** Run `setGroqApiKeyOnce()` once with your key, then remove the key string from the function
+   - Or set the `GROQ_API_KEY` constant directly
 4. **Deploy → New deployment → Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**
-5. 배포 URL을 `index.html`의 `GAS_URL`에 반영
-6. (선택) `setupAuditorTrigger()` 1회 실행 → 3시간마다 후보 자동 심사
+5. Copy the deployment URL into `GAS_URL` in `index.html`
+6. *(Optional)* Run `setupAuditorTrigger()` once to auto-review candidates every 3 hours
 
-지원 API:
+### Web App API
 
-| action | 설명 |
-|--------|------|
-| `data` | Sheet1 장소 JSON 반환 (웹앱 fallback) |
-| `add` | 사용자 요청을 Candidates 시트에 Pending으로 추가 |
+| Action | Method | Parameters | Response |
+|--------|--------|------------|----------|
+| `data` | GET | — | `{ ok: true, places: [...] }` — all places from Sheet1 |
+| `add` | GET/POST | `name`, `country` | `{ ok: true, message: "..." }` — queues place in Candidates |
 
-내부 배치 함수:
+### Server-side Functions
 
-| 함수 | 설명 |
-|------|------|
-| `minePlaces(location)` | AI로 지역별 할랄 장소 후보 채굴 |
-| `autoReviewCandidates()` | Pending 후보 AI 심사 후 Sheet1 등록 |
-| `setupAuditorTrigger()` | 3시간마다 autoReviewCandidates 실행 |
-
----
-
-## 기술 스택
-
-- **Frontend:** Vanilla HTML / CSS / JavaScript (ES Modules)
-- **Map:** [Leaflet.js](https://leafletjs.com/) + OpenStreetMap
-- **AI:** [Groq API](https://console.groq.com/) — 앱 시작 시 `/v1/models`로 사용 가능 모델을 조회하고, 적합한 모델 중 하나를 랜덤 선택 후 실패 시 다른 모델로 자동 fallback
-- **Deploy:** GitHub Pages + GitHub Actions
+| Function | Description |
+|----------|-------------|
+| `minePlaces(location)` | AI-mining: finds 3 Halal places for a given location |
+| `consultAmina(name, country)` | AI auditor: strict Halal compliance check |
+| `autoReviewCandidates()` | Reviews up to 5 pending candidates and moves approved ones to Sheet1 |
+| `setupAuditorTrigger()` | Creates a 3-hour time-based trigger for auto-review |
 
 ---
 
-## 최근 수정 사항
+## Data Pipeline
 
-- Groq `/v1/models` 기반 동적 모델 탐색 + 적합 모델 랜덤 할당 + 자동 fallback
-- Google Sheets CSV 로드 재시도/캐시 무효화/줄바꿈 정규화
-- Google Apps Script 데이터 fallback (`action=data`) 및 저장 요청 검증 (`action=add`)
-- `no-cors`로 성공처럼 보이던 GAS 저장 오류 수정
-- `gas/Code.gs` 추가 (doGet/doPost)
-- `writeReview()` null 데이터 크래시 수정
-- 상세 지도 재진입 Leaflet 초기화 오류 수정
+```
+Google Sheets (Sheet1)
+  │
+  ├── Published CSV ──────────► Web App (primary load, with retry + cache bust)
+  │
+  └── Google Apps Script
+        ├── action=data ──────► Web App fallback load
+        ├── action=add ───────► Candidates sheet (Pending)
+        ├── minePlaces() ─────► Candidates sheet (AI-mined)
+        └── autoReviewCandidates()
+              └── consultAmina() ──► Approved → Sheet1
+```
+
+Place data schema (Sheet1 columns):
+
+```
+Country | name | name_ko | lat | lon | category | label | desc_ko | desc_en | address
+```
+
+---
+
+## Amina AI Persona
+
+Amina is configured to:
+
+- **Always respond in the user's selected language** (Korean, English, Japanese, or Chinese)
+- **Stay in character** as a Halal travel guide — even off-topic questions are redirected to travel, food, prayer, or culture
+- **Include recommendation reasons** and **Google Maps links** for every place suggestion
+- **Warn strictly** about pork, alcohol, and non-Halal ingredients
+
+---
+
+## Changelog
+
+- Dynamic Groq model discovery + random assignment + automatic fallback
+- UI navigation: back/home buttons on all sub-pages with history stack
+- Multilingual UI labels (KO / EN / JP / CN)
+- Amina travel guide persona with mandatory Google Maps links
+- Google Sheets CSV load: retry, cache bust, CRLF normalization
+- Google Apps Script data fallback and verified save requests
+- Integrated GAS mining pipeline (`minePlaces`, `autoReviewCandidates`)
+- Fixed Leaflet map re-initialization, null review crash, country dropdown sort
 
 ---
 
