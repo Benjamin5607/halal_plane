@@ -18,6 +18,13 @@ const EXCLUDED_MODEL_PATTERNS = [
     /tts/i
 ];
 
+const LANG_NAMES = {
+    KO: "Korean",
+    EN: "English",
+    JP: "Japanese",
+    CN: "Chinese"
+};
+
 export class AIBrain {
     constructor(apiKey, translations) {
         this.apiKey = apiKey;
@@ -113,7 +120,48 @@ export class AIBrain {
         }
     }
 
-    // 📏 거리 계산 (Haversine Formula)
+    buildGoogleMapLink(name, address = "", country = "") {
+        const query = encodeURIComponent([name, address, country].filter(Boolean).join(" "));
+        return `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+
+    getLanguageName(currentLang) {
+        return LANG_NAMES[currentLang] || this.t.ai || "Korean";
+    }
+
+    buildTravelGuidePrompt(currentLang) {
+        const language = this.getLanguageName(currentLang);
+        return `
+You are Amina (아미나), a warm and trusted Halal travel guide for Muslim travelers worldwide.
+
+[PERSONA - ALWAYS ON]
+- You are ONLY a Halal travel guide. Never break character.
+- Even if the user asks unrelated questions (weather, jokes, news, coding, personal chat), gently redirect and answer from a Muslim travel guide perspective.
+- Connect every answer to travel: halal food, mosques/prayer, neighborhoods, transport, safety, culture, or trip planning.
+- Tone: friendly, reassuring, like a local Muslim friend who knows the city well.
+
+[LANGUAGE - STRICT]
+- Respond ONLY in ${language}.
+- Do NOT mix other languages in your reply.
+
+[PLACE RECOMMENDATIONS - MANDATORY FORMAT]
+Whenever you recommend a place (restaurant, cafe, mosque, market, hotel area, attraction):
+1. Write the place name as [Exact Place Name] for DB matches, or [Place Name] (External) for general knowledge.
+2. On the next line, write "Why:" with 1-2 sentences explaining WHY you recommend it (halal status, location, vibe, distance, etc.).
+3. On the next line, ALWAYS include a Google Maps link exactly like:
+   Map: https://www.google.com/maps/search/?api=1&query=Place+Name+Address
+
+[HARAM SAFETY]
+- Strictly warn about pork, alcohol, lard, and non-halal meat.
+- Suggest safer Halal alternatives when needed.
+
+[LOCATION LOGIC]
+- If user asks for a specific city/region, prioritize that area over GPS.
+- If user asks "near me" or gives no location, use GPS distance info when available.
+- If GPS and viewed country conflict, GPS wins for "nearby" requests.
+        `.trim();
+    }
+
     calculateDistance(lat1, lon1, lat2, lon2) {
         if (!lat1 || !lon1 || !lat2 || !lon2) return 99999;
         const R = 6371;
@@ -146,71 +194,60 @@ export class AIBrain {
                 (p.address || "") + " " + (p.origin_country || "")
             ).toLowerCase();
 
-            let keywordMatch = false;
             keywords.forEach(k => {
-                if (content.includes(k)) {
-                    score += 10;
-                    keywordMatch = true;
-                }
+                if (k.length > 1 && content.includes(k)) score += 10;
             });
 
             if (userLoc && p.distance < 5) score += 20;
             else if (userLoc && p.distance < 20) score += 10;
             else if (userLoc && p.distance < 100) score += 5;
 
-            return { place: p, score: score, match: keywordMatch };
+            return { place: p, score: score };
         });
 
         return scored
             .filter(item => item.score > 0)
             .sort((a, b) => b.score - a.score || a.place.distance - b.place.distance)
             .map(item => {
-                let distInfo = userLoc ? `(${item.place.distance.toFixed(1)}km away)` : "";
-                return { ...item.place, distInfo: distInfo };
+                const p = item.place;
+                const distInfo = userLoc ? `(${item.place.distance.toFixed(1)}km away)` : "";
+                const mapLink = this.buildGoogleMapLink(p.name, p.address, p.origin_country);
+                return { ...p, distInfo, mapLink };
             })
             .slice(0, 10);
     }
 
-    async ask(query, history, db, currentCountry, userLoc) {
-        if (!this.apiKey || this.apiKey.includes("PLACEHOLDER")) return "🔑 Please set API Key first.";
+    async ask(query, history, db, currentCountry, userLoc, currentLang = "KO") {
+        if (!this.apiKey || this.apiKey.includes("PLACEHOLDER")) {
+            return currentLang === "KO"
+                ? "🔑 Groq API Key를 먼저 설정해 주세요."
+                : "🔑 Please set your Groq API Key first.";
+        }
+
         await this.ensureModelsLoaded();
 
         const relevantPlaces = this.getRelevantPlaces(query, db, userLoc);
-        let contextStr = relevantPlaces.length > 0
+        const contextStr = relevantPlaces.length > 0
             ? relevantPlaces.map(p =>
-                `- [${p.name}] (${p.origin_country}, ${p.address}) ${p.distInfo || ""}: ${p.desc_en || p.desc_ko}`
+                `- [${p.name}] (${p.origin_country}, ${p.address || "no address"}) ${p.distInfo || ""}\n  Why hint: ${p.desc_en || p.desc_ko || "Halal-friendly spot"}\n  Map: ${p.mapLink}`
             ).join("\n")
-            : "No direct match in DB.";
+            : "No direct match in DB. You may suggest well-known Halal-friendly places using (External) tag.";
 
         const systemPrompt = `
-        You are Amina, a smart Halal travel guide.
-        
-        [USER CONTEXT]
-        - Query: "${query}"
-        - User's GPS Location: ${userLoc ? `Lat ${userLoc.lat}, Lon ${userLoc.lon}` : "Unknown"}
-        - Currently Viewed Map: ${currentCountry} (IGNORE this if it conflicts with Query or GPS)
+${this.buildTravelGuidePrompt(currentLang)}
 
-        [SEARCH RESULTS FROM DB]
-        ${contextStr}
+[USER CONTEXT]
+- User message: "${query}"
+- GPS: ${userLoc ? `Lat ${userLoc.lat}, Lon ${userLoc.lon}` : "Unknown"}
+- Currently viewed country in app: ${currentCountry} (ignore if it conflicts with query or GPS)
 
-        [DECISION RULES]
-        1. 🎯 **LOCATION PRIORITY:**
-           - **Rule A (Explicit Request):** If the user asks for a specific place (e.g., "Seoul", "Busan"), ONLY recommend places in that region. Ignore the User's GPS and Viewed Map.
-           - **Rule B (Nearby Request):** If the user asks "Near me", "Around here", or just "Chicken" (without location), recommend the CLOSEST places based on the 'km away' info in [SEARCH RESULTS].
-           - **Rule C (Conflict):** If User is in Korea (GPS) but viewing Japan Map, and asks "Best food nearby", recommend KOREAN food (GPS wins).
-
-        2. 🚨 **HARAM CHECK:**
-           - Strict warning on Pork/Alcohol. Suggest Halal alternatives.
-
-        3. **FORMAT:**
-           - Recommended: [Place Name]
-           - External Knowledge: [Place Name] (External)
-           - Mention distance if available (e.g., "It's just 2km away!").
-        `;
+[DATABASE SEARCH RESULTS]
+${contextStr}
+        `.trim();
 
         const messages = [
             { role: "system", content: systemPrompt },
-            ...history.slice(-4),
+            ...history.slice(-6),
             { role: "user", content: query }
         ];
 
@@ -219,36 +256,50 @@ export class AIBrain {
 
     async writeReview(placeName, country, isExternal = false, placeData = null) {
         await this.ensureModelsLoaded();
+        const language = this.getLanguageName(this.t.langCode || "KO");
+        const mapLink = this.buildGoogleMapLink(
+            placeData?.name || placeName,
+            placeData?.address || "",
+            country
+        );
 
         let prompt = "";
         if (isExternal) {
             prompt = `
-            User is interested in "${placeName}" in ${country}.
-            This place is NOT in our database.
-            Write a brief 3-line guide based on general knowledge.
-            1. Food Type?
-            2. Halal Status? (Honest guess)
-            3. Why famous?
-            Language: ${this.t.ai}
+${this.buildTravelGuidePrompt(this.t.langCode || "KO")}
+
+Write a short travel guide note for "${placeName}" in ${country}.
+This place is NOT in our database yet.
+Include: food type, honest Halal assessment, why travelers visit, and this map link:
+Map: ${mapLink}
+Language: ${language}
+Keep it under 6 lines.
             `;
         } else if (placeData) {
             prompt = `
-            Write a 5-line review for "${placeName}" in ${country}.
-            Data: ${placeData.desc_en || placeData.desc_ko || "No description available."}
-            Focus on Halal status.
-            Language: ${this.t.ai}
+${this.buildTravelGuidePrompt(this.t.langCode || "KO")}
+
+Write a warm travel guide review for "${placeName}" in ${country}.
+Reference data: ${placeData.desc_en || placeData.desc_ko || "No description available."}
+Focus on Halal status and why you recommend it.
+Include this map link on its own line:
+Map: ${mapLink}
+Language: ${language}
+Keep it under 8 lines.
             `;
         } else {
             prompt = `
-            Write a brief 3-line guide for "${placeName}" in ${country}.
-            This place was requested but is not yet in our database.
-            1. Food Type?
-            2. Halal Status? (Honest guess)
-            3. Why might travelers visit?
-            Language: ${this.t.ai}
+${this.buildTravelGuidePrompt(this.t.langCode || "KO")}
+
+Write a brief travel guide note for "${placeName}" in ${country}.
+This place was requested but is not yet verified in our database.
+Include: food type, Halal guess, why visit, and:
+Map: ${mapLink}
+Language: ${language}
             `;
         }
-        return await this._callGroq([{ role: "user", content: prompt }]);
+
+        return await this._callGroq([{ role: "user", content: prompt.trim() }]);
     }
 
     async _callGroq(messages) {
@@ -263,7 +314,7 @@ export class AIBrain {
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${this.apiKey}`
                     },
-                    body: JSON.stringify({ model, messages, temperature: 0.3 })
+                    body: JSON.stringify({ model, messages, temperature: 0.4 })
                 });
 
                 if (res.ok) {

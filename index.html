@@ -87,9 +87,25 @@
         }
         .amina-btn:active { transform: scale(0.9); }
 
-        /* Sub Pages */
-        .nav-bar { height: 60px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #333; background: rgba(17, 17, 17, 0.95); font-weight: bold; font-size: 18px; }
-        .nav-back { background: none; border: none; color: white; font-size: 24px; margin-right: 15px; cursor: pointer; }
+        /* Sub Pages Navigation */
+        .nav-bar {
+            height: 60px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 16px; border-bottom: 1px solid #333;
+            background: rgba(17, 17, 17, 0.95); backdrop-filter: blur(8px);
+            flex-shrink: 0;
+        }
+        .nav-actions { display: flex; gap: 8px; align-items: center; }
+        .nav-btn {
+            min-width: 42px; height: 42px; padding: 0 12px;
+            border-radius: 12px; border: 1px solid #444;
+            background: rgba(255,255,255,0.06); color: white;
+            font-size: 18px; cursor: pointer; transition: 0.2s;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .nav-btn:hover { border-color: var(--theme); background: rgba(16,185,129,0.15); }
+        .nav-btn.nav-home { font-size: 16px; }
+        .nav-title { flex: 1; text-align: center; font-weight: bold; font-size: 16px; color: var(--theme); letter-spacing: 0.5px; }
+        .nav-spacer { width: 92px; }
 
         /* Detail Page */
         #detail-map { width: 100%; height: 35vh; border-bottom: 2px solid var(--theme); }
@@ -124,6 +140,14 @@
         /* [Fix 5] Reco Btn CSS Added */
         .reco-btn { margin-top: 8px; padding: 10px 12px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;}
         .reco-btn.external { background: var(--theme-ext); border: 1px dashed #60A5FA; }
+        .map-link {
+            display: inline-block; margin-top: 6px; padding: 8px 12px;
+            background: rgba(59,130,246,0.15); border: 1px solid #3B82F6;
+            border-radius: 8px; color: #93C5FD; text-decoration: none; font-size: 13px;
+        }
+        .map-link:hover { background: rgba(59,130,246,0.25); }
+        .chat-msg a { color: #6EE7B7; word-break: break-all; }
+        .review-content a { color: #6EE7B7; word-break: break-all; }
 
         /* Leaflet Custom */
         .leaflet-popup-content-wrapper { background: #1a1a1a; color: white; border: 1px solid var(--theme); }
@@ -163,16 +187,24 @@
 
     <div id="page-passport" class="page hidden-left">
         <div class="nav-bar">
-            <button class="nav-back" onclick="nav('page-main', 'active')">←</button>
-            MY PASSPORT
+            <div class="nav-actions">
+                <button class="nav-btn" onclick="navBack()" title="Back">←</button>
+                <button class="nav-btn nav-home" onclick="navHome()" title="Home">🏠</button>
+            </div>
+            <div class="nav-title" id="nav-title-passport">MY PASSPORT</div>
+            <div class="nav-spacer"></div>
         </div>
         <div id="stamp-grid" class="passport-grid"></div>
     </div>
 
     <div id="page-map" class="page hidden-bottom">
         <div class="nav-bar">
-            <button class="nav-back" onclick="nav('page-main', 'active')">🏠</button>
-            WORLD MAP
+            <div class="nav-actions">
+                <button class="nav-btn" onclick="navBack()" title="Back">←</button>
+                <button class="nav-btn nav-home" onclick="navHome()" title="Home">🏠</button>
+            </div>
+            <div class="nav-title" id="nav-title-map">WORLD MAP</div>
+            <div class="nav-spacer"></div>
         </div>
         <div class="map-search-box">
             <input id="map-input" class="map-input" type="text" placeholder="Search Place..." onkeydown="if(event.key==='Enter') searchMap()">
@@ -183,8 +215,12 @@
 
     <div id="page-chat" class="page hidden-bottom">
         <div class="nav-bar">
-            <button class="nav-back" onclick="nav('page-main', 'active')">↓</button>
-            Amina (AI Guide)
+            <div class="nav-actions">
+                <button class="nav-btn" onclick="navBack()" title="Back">←</button>
+                <button class="nav-btn nav-home" onclick="navHome()" title="Home">🏠</button>
+            </div>
+            <div class="nav-title" id="nav-title-chat">Amina (AI Guide)</div>
+            <div class="nav-spacer"></div>
         </div>
         <div id="chat-box" class="chat-container"></div>
         <div class="chat-input-area">
@@ -195,8 +231,12 @@
 
     <div id="page-detail" class="page hidden-right">
         <div class="nav-bar">
-            <button class="nav-back" onclick="nav('page-main', 'active')">←</button>
-            Amina's Note
+            <div class="nav-actions">
+                <button class="nav-btn" onclick="navBack()" title="Back">←</button>
+                <button class="nav-btn nav-home" onclick="navHome()" title="Home">🏠</button>
+            </div>
+            <div class="nav-title" id="nav-title-detail">Amina's Note</div>
+            <div class="nav-spacer"></div>
         </div>
         <div id="detail-map"></div>
         <div class="review-box">
@@ -235,12 +275,93 @@
         let markerLayer = null;
         let chatHistory = [];
         let amina = null;
+        let navStack = ['page-main'];
 
         const TRANSLATIONS = {
-            "KO": { ai: "Korean", greet: "앗살라무 알라이쿰! 🕌 무엇을 도와드릴까요?", filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페", "🕌 기도실"] },
-            "EN": { ai: "English", greet: "Assalamu Alaikum! How can I help you?", filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe", "🕌 Mosque"] },
-            "JP": { ai: "Japanese", greet: "アッサラーム・アライクム！お手伝いしましょうか？", filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ", "🕌 モスク"] },
-            "CN": { ai: "Chinese", greet: "色兰! 需要什么帮助?", filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡", "🕌 清真寺"] }
+            "KO": {
+                langCode: "KO",
+                ai: "Korean",
+                greet: "앗살라무 알라이쿰! 🕌 저는 할랄 여행 가이드 아미나예요. 맛집, 기도실, 동네 추천 무엇이든 물어보세요!",
+                thinking: "아미나가 여행 코스를 확인하고 있어요... 🕌",
+                reviewing: "아미나가 할랄 정보를 확인하고 있어요... 🕌",
+                filters: ["🌐 전체", "🍚 아시안", "🍔 웨스턴", "🥙 중동", "☕ 카페", "🕌 기도실"],
+                nav: { passport: "내 여권", map: "세계 지도", chat: "아미나 AI 가이드", detail: "아미나 여행 노트" },
+                ui: {
+                    explore: "🗺️ 세계 지도 보기",
+                    aiReview: "AI 리뷰",
+                    map: "지도",
+                    searchMap: "🗺️ 지도 검색",
+                    stamp: "✈️ 스탬프",
+                    saveDb: "➕ DB에 저장 요청",
+                    visited: "🏆 방문함",
+                    chatPlaceholder: "아미나에게 여행 질문하기...",
+                    mapPlaceholder: "장소 검색...",
+                    loadingReview: "잠시만요, 아미나가 할랄 상태를 확인 중이에요... 🕌"
+                }
+            },
+            "EN": {
+                langCode: "EN",
+                ai: "English",
+                greet: "Assalamu Alaikum! 🕌 I'm Amina, your Halal travel guide. Ask me about food, mosques, neighborhoods, or trip tips!",
+                thinking: "Amina is planning your route... 🕌",
+                reviewing: "Amina is checking Halal details... 🕌",
+                filters: ["🌐 All", "🍚 Asian", "🍔 Western", "🥙 Middle East", "☕ Cafe", "🕌 Mosque"],
+                nav: { passport: "My Passport", map: "World Map", chat: "Amina AI Guide", detail: "Amina's Travel Note" },
+                ui: {
+                    explore: "🗺️ Explore World",
+                    aiReview: "AI REVIEW",
+                    map: "MAP",
+                    searchMap: "🗺️ SEARCH MAP",
+                    stamp: "✈️ STAMP",
+                    saveDb: "➕ Save to Database",
+                    visited: "🏆 VISITED",
+                    chatPlaceholder: "Ask Amina about your trip...",
+                    mapPlaceholder: "Search place...",
+                    loadingReview: "Wait a moment, Amina is checking Halal status... 🕌"
+                }
+            },
+            "JP": {
+                langCode: "JP",
+                ai: "Japanese",
+                greet: "アッサラーム・アライクム！🕌 ハラール旅行ガイドのアミナです。レストラン、モスク、観光の相談をどうぞ！",
+                thinking: "アミナが旅行プランを確認中... 🕌",
+                reviewing: "アミナがハラール情報を確認中... 🕌",
+                filters: ["🌐 全部", "🍚 アジア", "🍔 洋食", "🥙 中東", "☕ カフェ", "🕌 モスク"],
+                nav: { passport: "マイパスポート", map: "世界地図", chat: "アミナ AIガイド", detail: "アミナの旅行ノート" },
+                ui: {
+                    explore: "🗺️ 世界地図",
+                    aiReview: "AIレビュー",
+                    map: "地図",
+                    searchMap: "🗺️ 地図検索",
+                    stamp: "✈️ スタンプ",
+                    saveDb: "➕ DB保存リクエスト",
+                    visited: "🏆 訪問済",
+                    chatPlaceholder: "アミナに旅行の質問...",
+                    mapPlaceholder: "場所を検索...",
+                    loadingReview: "アミナがハラール情報を確認中... 🕌"
+                }
+            },
+            "CN": {
+                langCode: "CN",
+                ai: "Chinese",
+                greet: "色兰！🕌 我是您的Halal旅行向导Amina。欢迎咨询餐厅、清真寺和旅行建议！",
+                thinking: "Amina正在为您规划路线... 🕌",
+                reviewing: "Amina正在核实Halal信息... 🕌",
+                filters: ["🌐 全部", "🍚 亚洲", "🍔 西餐", "🥙 中东", "☕ 咖啡", "🕌 清真寺"],
+                nav: { passport: "我的护照", map: "世界地图", chat: "Amina AI向导", detail: "Amina旅行笔记" },
+                ui: {
+                    explore: "🗺️ 探索世界",
+                    aiReview: "AI 点评",
+                    map: "地图",
+                    searchMap: "🗺️ 搜索地图",
+                    stamp: "✈️ 盖章",
+                    saveDb: "➕ 保存到数据库",
+                    visited: "🏆 已访问",
+                    chatPlaceholder: "向Amina提问旅行问题...",
+                    mapPlaceholder: "搜索地点...",
+                    loadingReview: "请稍候，Amina正在核实Halal状态... 🕌"
+                }
+            }
         };
 
         // 🚀 INIT
@@ -251,6 +372,7 @@
             }
             amina = new AIBrain(GROQ_API_KEY, TRANSLATIONS[currentLang]);
             await amina.ensureModelsLoaded();
+            updateUILabels();
             await loadData();
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -449,8 +571,47 @@
             throw new Error(lastError);
         }
 
-        // UI Functions
-        window.nav = function(pageId, effect = 'left') {
+        function t(key) {
+            const parts = key.split('.');
+            let val = TRANSLATIONS[currentLang];
+            for (const part of parts) val = val?.[part];
+            return val || key;
+        }
+
+        function updateUILabels() {
+            const tr = TRANSLATIONS[currentLang];
+            document.getElementById('nav-title-passport').innerText = tr.nav.passport;
+            document.getElementById('nav-title-map').innerText = tr.nav.map;
+            document.getElementById('nav-title-chat').innerText = tr.nav.chat;
+            document.getElementById('nav-title-detail').innerText = tr.nav.detail;
+            document.querySelector('.map-trigger-btn').innerText = tr.ui.explore;
+            document.getElementById('chat-msg-input').placeholder = tr.ui.chatPlaceholder;
+            document.getElementById('map-input').placeholder = tr.ui.mapPlaceholder;
+            document.getElementById('btn-open-map').innerText = tr.ui.searchMap;
+            document.getElementById('btn-stamp').innerText = tr.ui.stamp;
+        }
+
+        function formatAminaReply(reply) {
+            let fmt = reply.replace(/\[(.*?)\](\s*\(External\))?/g, (match, placeName, externalTag) => {
+                const isExternal = !!externalTag;
+                const btnClass = isExternal ? "reco-btn external" : "reco-btn";
+                const label = isExternal ? `🌐 ${placeName}` : `📍 ${placeName}`;
+                return `<br><button class="${btnClass}" onclick="openReview('${escapeJsStr(placeName)}', '${escapeJsStr(currentCountry)}', ${isExternal})">${label}</button>`;
+            });
+
+            fmt = fmt.replace(/Map:\s*(https:\/\/[^\s<\n]+)/gi, (match, url) =>
+                `<br><a href="${url}" target="_blank" rel="noopener" class="map-link">🗺️ Google Maps</a>`
+            );
+
+            fmt = fmt.replace(/(https:\/\/(?:www\.)?google\.com\/maps[^\s<\n]+)/gi, (match, url) =>
+                `<a href="${url}" target="_blank" rel="noopener" class="map-link">🗺️ Google Maps</a>`
+            );
+
+            fmt = fmt.replace(/\n/g, '<br>');
+            return fmt;
+        }
+
+        function showPage(pageId) {
             document.querySelectorAll('.page').forEach(p => {
                 p.classList.remove('active', 'hidden-left', 'hidden-right', 'hidden-bottom');
                 if (p.id !== pageId) p.classList.add('hidden-left');
@@ -458,14 +619,41 @@
             const target = document.getElementById(pageId);
             target.classList.remove('hidden-left', 'hidden-right', 'hidden-bottom');
             target.classList.add('active');
-            if(pageId === 'page-passport') renderPassport();
+        }
+
+        // UI Functions
+        window.nav = function(pageId, effect = 'left', replaceHistory = false) {
+            const current = document.querySelector('.page.active');
+            if (!replaceHistory && current && current.id !== pageId) {
+                navStack.push(current.id);
+            }
+            if (pageId === 'page-main') {
+                navStack = ['page-main'];
+            }
+            showPage(pageId);
+            if (pageId === 'page-passport') renderPassport();
+        }
+
+        window.navBack = function() {
+            if (navStack.length > 1) {
+                navStack.pop();
+                showPage(navStack[navStack.length - 1]);
+                return;
+            }
+            navHome();
+        }
+
+        window.navHome = function() {
+            navStack = ['page-main'];
+            showPage('page-main');
         }
 
         window.setLang = function(lang) {
             currentLang = lang;
             document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(`lang-${lang}`).classList.add('active');
-            if(amina) amina.t = TRANSLATIONS[lang];
+            if (amina) amina.t = TRANSLATIONS[lang];
+            updateUILabels();
             renderFilters();
             renderList();
         }
@@ -512,15 +700,15 @@
                 const div = document.createElement('div');
                 div.className = `card ${isVisited ? 'visited' : ''}`;
                 div.innerHTML = `
-                    ${isVisited ? '<div class="visited-badge">🏆 VISITED</div>' : ''}
+                    ${isVisited ? `<div class="visited-badge">${t('ui.visited')}</div>` : ''}
                     <div class="card-header">
                         <div class="card-name">${p.name} ${nameKoHtml} ${distHtml}</div>
                         <div class="card-label">${p.label || p.category}</div>
                     </div>
                     <div class="card-desc">${desc}</div>
                     <div class="card-actions">
-                        <button class="action-btn btn-review" onclick="openReview('${escapeJsStr(p.name)}', '${escapeJsStr(currentCountry)}')">AI REVIEW</button>
-                        <button class="action-btn btn-map" onclick="window.open('${getMapLink(p, currentCountry)}', '_blank')">MAP</button>
+                        <button class="action-btn btn-review" onclick="openReview('${escapeJsStr(p.name)}', '${escapeJsStr(currentCountry)}')">${t('ui.aiReview')}</button>
+                        <button class="action-btn btn-map" onclick="window.open('${getMapLink(p, currentCountry)}', '_blank')">${t('ui.map')}</button>
                     </div>
                 `;
                 list.appendChild(div);
@@ -542,7 +730,7 @@
             nav('page-detail', 'right');
             document.getElementById('review-title').innerText = name;
             document.getElementById('review-sub').innerText = country + (isExternal ? " (WEB SEARCH)" : "");
-            document.getElementById('review-content').innerText = "Amina is checking details... 🕌";
+            document.getElementById('review-content').innerText = t('reviewing');
             
             const addArea = document.getElementById('add-db-area');
             addArea.innerHTML = ""; 
@@ -564,7 +752,7 @@
             if (isExternal) {
                 const addBtn = document.createElement('button');
                 addBtn.className = "action-btn btn-add-db";
-                addBtn.innerText = "➕ Save to Database (Real)";
+                addBtn.innerText = t('ui.saveDb');
                 
                 addBtn.onclick = async () => {
                     addBtn.innerText = "⏳ Saving...";
@@ -605,7 +793,7 @@
             }
 
             const reply = await amina.writeReview(name, country, isExternal, place);
-            document.getElementById('review-content').innerHTML = reply;
+            document.getElementById('review-content').innerHTML = formatAminaReply(reply);
         }
 
         window.sendChat = async function() {
@@ -614,24 +802,15 @@
             if(!txt) return;
             addChatBubble(txt, 'user');
             input.value = '';
-            addChatBubble("Amina is thinking...", 'bot', false, 'temp-loading');
+            addChatBubble(t('thinking'), 'bot', false, 'temp-loading');
 
             const userLoc = (userLat) ? {lat: userLat, lon: userLon} : null;
-            const reply = await amina.ask(txt, chatHistory, PLACE_DB, currentCountry, userLoc);
+            const reply = await amina.ask(txt, chatHistory, PLACE_DB, currentCountry, userLoc, currentLang);
             
             const loading = document.getElementById('temp-loading');
             if(loading) loading.remove();
 
-            let fmtReply = reply.replace(/\[(.*?)\](\s*\(External\))?/g, (match, p1, p2) => {
-                const name = p1;
-                const isExternal = !!p2; 
-                const btnClass = isExternal ? "reco-btn external" : "reco-btn";
-                const label = isExternal ? `🌐 ${name} (Web Search)` : `📍 ${name}`;
-                
-                return `<br><button class="${btnClass}" onclick="openReview('${escapeJsStr(name)}', '${escapeJsStr(currentCountry)}', ${isExternal})">${label}</button>`;
-            });
-
-            addChatBubble(fmtReply, 'bot', true);
+            addChatBubble(formatAminaReply(reply), 'bot', true);
             chatHistory.push({role: "user", content: txt});
             chatHistory.push({role: "assistant", content: reply});
         }
