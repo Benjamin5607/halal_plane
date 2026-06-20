@@ -85,17 +85,29 @@ Repository → **Settings → Secrets and variables → Actions** 에서:
 
 1. Google Sheet → **Extensions → Apps Script**
 2. `gas/Code.gs` 내용 붙여넣기
-3. **Deploy → New deployment → Web app**
+3. Groq API Key 설정 (둘 중 하나)
+   - **권장:** `setGroqApiKeyOnce()` 함수에 키 입력 후 1회 실행 → 함수에서 키 문자열 삭제
+   - 또는 `GROQ_API_KEY` 상수에 직접 입력
+4. **Deploy → New deployment → Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**
-4. 배포 URL을 `index.html`의 `GAS_URL`에 반영
+5. 배포 URL을 `index.html`의 `GAS_URL`에 반영
+6. (선택) `setupAuditorTrigger()` 1회 실행 → 3시간마다 후보 자동 심사
 
 지원 API:
 
 | action | 설명 |
 |--------|------|
-| `data` | 시트 전체 장소 JSON 반환 |
-| `add` | `name`, `country` 요청을 `Requests` 시트에 저장 |
+| `data` | Sheet1 장소 JSON 반환 (웹앱 fallback) |
+| `add` | 사용자 요청을 Candidates 시트에 Pending으로 추가 |
+
+내부 배치 함수:
+
+| 함수 | 설명 |
+|------|------|
+| `minePlaces(location)` | AI로 지역별 할랄 장소 후보 채굴 |
+| `autoReviewCandidates()` | Pending 후보 AI 심사 후 Sheet1 등록 |
+| `setupAuditorTrigger()` | 3시간마다 autoReviewCandidates 실행 |
 
 ---
 
