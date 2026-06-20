@@ -161,9 +161,10 @@ Map: [exact map URL for the country]
 
 Map provider rules:
 - ${mapExamples[currentLang] || mapExamples.EN}
-- For China places use Baidu format: https://map.baidu.com/search/Place+Name+City/
-- For Korea places use Naver format: https://map.naver.com/p/search/Place+Name
-- For other countries use Google format: https://www.google.com/maps/search/?api=1&query=Place+Name+Address
+- For China: https://map.baidu.com/search/Place+Name+Address/@lng,lat,19z
+- For Korea: https://map.naver.com/v5/search/Place+Name+Address?c=lng,lat,17,0,0,0,dh
+- For others: https://www.google.com/maps/search/Place+Name+Address/@lat,lng,17z
+- Always search by restaurant name and address; use coordinates only to center the search area.
 - When DB results include Map: URL, copy that exact URL.
 
 Rules:
