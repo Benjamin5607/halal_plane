@@ -52,6 +52,7 @@ The app discovers available models at runtime and excludes non-chat models (Whis
 halal_plane/
 ├── index.html              # Main UI, navigation, data loading, chat interface
 ├── ai_brain.js             # Amina AI module (Groq API, GPS search, persona prompts)
+├── map_links.js            # Map link builder (Google / Naver / Baidu, coordinate-first)
 ├── gas/
 │   └── Code.gs             # Google Apps Script — Web App API, mining, auto-auditor
 ├── manifest.json           # PWA manifest (icons, theme, display mode)

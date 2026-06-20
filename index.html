@@ -258,6 +258,7 @@
 
     <script type="module">
         import { AIBrain } from './ai_brain.js';
+        import { buildMapLink, buildExternalMapLink, extractMapLinkLabel, getMapProviderLabel, MAP_URL_PATTERN } from './map_links.js';
 
         // ⚙️ CONFIG
         let GROQ_API_KEY = "GROQ_KEY_PLACEHOLDER";
@@ -607,13 +608,10 @@
         }
 
         function getMapButtonLabel(url) {
-            try {
-                const parsed = new URL(url);
-                const query = parsed.searchParams.get("query");
-                if (query) return "🗺️ " + decodeURIComponent(query.replace(/\+/g, " "));
-            } catch (error) {
-                console.warn(error);
-            }
+            const extracted = extractMapLinkLabel(url);
+            if (extracted) return "🗺️ " + extracted;
+            if (url.includes("baidu.com")) return "🗺️ " + getMapProviderLabel("China", currentLang);
+            if (url.includes("naver.com")) return "🗺️ " + getMapProviderLabel("Korea", currentLang);
             return t("ui.openGoogleMaps");
         }
 
@@ -627,8 +625,8 @@
             const mapButtons = [];
             let working = String(reply || "");
 
-            working = working.replace(/(?:Google Maps?|Map|지도|地図|地图)\s*[:：]\s*/gi, "");
-            working = working.replace(/https:\/\/(?:www\.)?google\.com\/maps[^\s)\]"']+/gi, (url) => {
+            working = working.replace(/(?:Google Maps?|Baidu Maps?|Naver Map|百度地图|Map|지도|地図|地图)\s*[:：]\s*/gi, "");
+            working = working.replace(MAP_URL_PATTERN, (url) => {
                 const idx = mapButtons.length;
                 mapButtons.push(buildMapButton(url));
                 return `\n[[MAP_BTN_${idx}]]\n`;
@@ -749,7 +747,7 @@
                     <div class="card-desc">${desc}</div>
                     <div class="card-actions">
                         <button class="action-btn btn-review" onclick="openReview('${escapeJsStr(p.name)}', '${escapeJsStr(currentCountry)}')">${t('ui.aiReview')}</button>
-                        <button class="action-btn btn-map" onclick="window.open('${getMapLink(p, currentCountry)}', '_blank')">${t('ui.map')}</button>
+                        <button class="action-btn btn-map" onclick="window.open('${escapeJsStr(buildMapLink(p, currentCountry))}', '_blank')">${t('ui.map')}</button>
                     </div>
                 `;
                 list.appendChild(div);
@@ -780,14 +778,8 @@
             if (!isExternal && PLACE_DB[country]) place = PLACE_DB[country].find(p => p.name === name);
 
             document.getElementById('btn-open-map').onclick = () => {
-                if (place) window.open(getMapLink(place, country), '_blank');
-                else {
-                    const query = name + " " + country;
-                    const url = (country.includes("Korea") || country.includes("한국")) 
-                        ? "https://map.naver.com/p/search/" + encodeURIComponent(query)
-                        : "https://www.google.com/maps/search/" + encodeURIComponent(query);
-                    window.open(url, '_blank');
-                }
+                if (place) window.open(buildMapLink(place, country), '_blank');
+                else window.open(buildExternalMapLink(name, country), '_blank');
             };
 
             if (isExternal) {
@@ -926,14 +918,6 @@
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*(Math.PI/180)) * Math.cos(lat2*(Math.PI/180)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
             return (R * c).toFixed(1);
-        }
-
-        function getMapLink(p, c) {
-            if(c.includes("Korea") || c.includes("한국")) {
-                if(p.name_ko) return "https://map.naver.com/p/search/" + encodeURIComponent(p.name_ko);
-                return "https://map.naver.com/p/search/" + encodeURIComponent(p.name);
-            }
-            return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.name + " " + p.address);
         }
     </script>
 </body>

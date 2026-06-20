@@ -1,6 +1,8 @@
 // ai_brain.js
 // 아미나의 지능 (GPS Proximity + Global Search)
 
+import { buildMapLink, getMapProvider, getMapProviderLabel } from './map_links.js';
+
 const FALLBACK_CHAT_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
@@ -121,8 +123,7 @@ export class AIBrain {
     }
 
     buildGoogleMapLink(name, address = "", country = "") {
-        const query = encodeURIComponent([name, address, country].filter(Boolean).join(" "));
-        return `https://www.google.com/maps/search/?api=1&query=${query}`;
+        return buildMapLink({ name, address }, country);
     }
 
     getLanguageName(currentLang) {
@@ -131,6 +132,13 @@ export class AIBrain {
 
     buildTravelGuidePrompt(currentLang) {
         const language = this.getLanguageName(currentLang);
+        const mapExamples = {
+            KO: "중국 → Baidu Maps URL / 한국 → Naver Map URL / 기타 → Google Maps URL",
+            EN: "China → Baidu Maps URL / Korea → Naver Map URL / others → Google Maps URL",
+            JP: "中国 → Baidu Maps URL / 韓国 → Naver Map URL / その他 → Google Maps URL",
+            CN: "中国 → 百度地图 URL / 韩国 → Naver Map URL / 其他 → Google Maps URL"
+        };
+
         return `
 You are Amina (아미나), a warm and trusted Halal travel guide for Muslim travelers worldwide.
 
@@ -149,7 +157,14 @@ For EACH recommended place, use EXACTLY this block (repeat for multiple places):
 
 [Place Name] (External)
 Why: 1-2 sentences explaining halal status, vibe, and why you recommend it.
-Map: https://www.google.com/maps/search/?api=1&query=Place+Name+City
+Map: [exact map URL for the country]
+
+Map provider rules:
+- ${mapExamples[currentLang] || mapExamples.EN}
+- For China places use Baidu format: https://map.baidu.com/search/Place+Name+City/
+- For Korea places use Naver format: https://map.naver.com/p/search/Place+Name
+- For other countries use Google format: https://www.google.com/maps/search/?api=1&query=Place+Name+Address
+- When DB results include Map: URL, copy that exact URL.
 
 Rules:
 - Use [Exact Place Name] without (External) for DB matches.
@@ -219,8 +234,8 @@ Rules:
             .map(item => {
                 const p = item.place;
                 const distInfo = userLoc ? `(${item.place.distance.toFixed(1)}km away)` : "";
-                const mapLink = this.buildGoogleMapLink(p.name, p.address, p.origin_country);
-                return { ...p, distInfo, mapLink };
+                const mapLink = buildMapLink(p, p.origin_country);
+                return { ...p, distInfo, mapLink, mapProvider: getMapProvider(p.origin_country) };
             })
             .slice(0, 10);
     }
@@ -265,11 +280,11 @@ ${contextStr}
     async writeReview(placeName, country, isExternal = false, placeData = null) {
         await this.ensureModelsLoaded();
         const language = this.getLanguageName(this.t.langCode || "KO");
-        const mapLink = this.buildGoogleMapLink(
-            placeData?.name || placeName,
-            placeData?.address || "",
+        const mapLink = buildMapLink(
+            placeData || { name: placeName, address: "" },
             country
         );
+        const mapLabel = getMapProviderLabel(country, this.t.langCode || "KO");
 
         let prompt = "";
         if (isExternal) {
@@ -292,6 +307,7 @@ Reference data: ${placeData.desc_en || placeData.desc_ko || "No description avai
 Focus on Halal status and why you recommend it.
 Include this map link on its own line:
 Map: ${mapLink}
+(${mapLabel})
 Language: ${language}
 Keep it under 8 lines.
             `;
