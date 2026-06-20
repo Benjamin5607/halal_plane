@@ -140,14 +140,17 @@
         /* [Fix 5] Reco Btn CSS Added */
         .reco-btn { margin-top: 8px; padding: 10px 12px; background: var(--theme); border: none; border-radius: 8px; color: white; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;}
         .reco-btn.external { background: var(--theme-ext); border: 1px dashed #60A5FA; }
-        .map-link {
-            display: inline-block; margin-top: 6px; padding: 8px 12px;
-            background: rgba(59,130,246,0.15); border: 1px solid #3B82F6;
-            border-radius: 8px; color: #93C5FD; text-decoration: none; font-size: 13px;
+        .map-btn {
+            display: block; width: 100%; box-sizing: border-box;
+            margin-top: 8px; padding: 10px 12px;
+            background: var(--theme); border: 1px solid var(--dark-theme);
+            border-radius: 8px; color: white; text-decoration: none;
+            font-size: 13px; font-weight: bold; text-align: left;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+            cursor: pointer; word-break: break-word;
         }
-        .map-link:hover { background: rgba(59,130,246,0.25); }
-        .chat-msg a { color: #6EE7B7; word-break: break-all; }
-        .review-content a { color: #6EE7B7; word-break: break-all; }
+        .map-btn:hover { background: var(--dark-theme); }
+        .chat-msg strong, .review-content strong { color: var(--theme); }
 
         /* Leaflet Custom */
         .leaflet-popup-content-wrapper { background: #1a1a1a; color: white; border: 1px solid var(--theme); }
@@ -296,7 +299,8 @@
                     visited: "🏆 방문함",
                     chatPlaceholder: "아미나에게 여행 질문하기...",
                     mapPlaceholder: "장소 검색...",
-                    loadingReview: "잠시만요, 아미나가 할랄 상태를 확인 중이에요... 🕌"
+                    loadingReview: "잠시만요, 아미나가 할랄 상태를 확인 중이에요... 🕌",
+                    openGoogleMaps: "🗺️ Google Maps에서 열기"
                 }
             },
             "EN": {
@@ -317,7 +321,8 @@
                     visited: "🏆 VISITED",
                     chatPlaceholder: "Ask Amina about your trip...",
                     mapPlaceholder: "Search place...",
-                    loadingReview: "Wait a moment, Amina is checking Halal status... 🕌"
+                    loadingReview: "Wait a moment, Amina is checking Halal status... 🕌",
+                    openGoogleMaps: "🗺️ Open in Google Maps"
                 }
             },
             "JP": {
@@ -338,7 +343,8 @@
                     visited: "🏆 訪問済",
                     chatPlaceholder: "アミナに旅行の質問...",
                     mapPlaceholder: "場所を検索...",
-                    loadingReview: "アミナがハラール情報を確認中... 🕌"
+                    loadingReview: "アミナがハラール情報を確認中... 🕌",
+                    openGoogleMaps: "🗺️ Google Mapsで開く"
                 }
             },
             "CN": {
@@ -359,7 +365,8 @@
                     visited: "🏆 已访问",
                     chatPlaceholder: "向Amina提问旅行问题...",
                     mapPlaceholder: "搜索地点...",
-                    loadingReview: "请稍候，Amina正在核实Halal状态... 🕌"
+                    loadingReview: "请稍候，Amina正在核实Halal状态... 🕌",
+                    openGoogleMaps: "🗺️ 在 Google Maps 中打开"
                 }
             }
         };
@@ -591,23 +598,57 @@
             document.getElementById('btn-stamp').innerText = tr.ui.stamp;
         }
 
+        function escapeHtml(str) {
+            return String(str || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function getMapButtonLabel(url) {
+            try {
+                const parsed = new URL(url);
+                const query = parsed.searchParams.get("query");
+                if (query) return "🗺️ " + decodeURIComponent(query.replace(/\+/g, " "));
+            } catch (error) {
+                console.warn(error);
+            }
+            return t("ui.openGoogleMaps");
+        }
+
+        function buildMapButton(url) {
+            const safeUrl = escapeHtml(url.trim());
+            const label = escapeHtml(getMapButtonLabel(url));
+            return `<a href="${safeUrl}" target="_blank" rel="noopener" class="map-btn">${label}</a>`;
+        }
+
         function formatAminaReply(reply) {
-            let fmt = reply.replace(/\[(.*?)\](\s*\(External\))?/g, (match, placeName, externalTag) => {
+            const mapButtons = [];
+            let working = String(reply || "");
+
+            working = working.replace(/(?:Google Maps?|Map|지도|地図|地图)\s*[:：]\s*/gi, "");
+            working = working.replace(/https:\/\/(?:www\.)?google\.com\/maps[^\s)\]"']+/gi, (url) => {
+                const idx = mapButtons.length;
+                mapButtons.push(buildMapButton(url));
+                return `\n[[MAP_BTN_${idx}]]\n`;
+            });
+
+            let fmt = escapeHtml(working);
+            fmt = fmt.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+            mapButtons.forEach((btn, idx) => {
+                fmt = fmt.replace(`[[MAP_BTN_${idx}]]`, btn);
+            });
+
+            fmt = fmt.replace(/\[(.*?)\](\s*\(External\))?/g, (match, placeName, externalTag) => {
                 const isExternal = !!externalTag;
                 const btnClass = isExternal ? "reco-btn external" : "reco-btn";
                 const label = isExternal ? `🌐 ${placeName}` : `📍 ${placeName}`;
-                return `<br><button class="${btnClass}" onclick="openReview('${escapeJsStr(placeName)}', '${escapeJsStr(currentCountry)}', ${isExternal})">${label}</button>`;
+                return `<br><button class="${btnClass}" onclick="openReview('${escapeJsStr(placeName)}', '${escapeJsStr(currentCountry)}', ${isExternal})">${escapeHtml(label)}</button>`;
             });
 
-            fmt = fmt.replace(/Map:\s*(https:\/\/[^\s<\n]+)/gi, (match, url) =>
-                `<br><a href="${url}" target="_blank" rel="noopener" class="map-link">🗺️ Google Maps</a>`
-            );
-
-            fmt = fmt.replace(/(https:\/\/(?:www\.)?google\.com\/maps[^\s<\n]+)/gi, (match, url) =>
-                `<a href="${url}" target="_blank" rel="noopener" class="map-link">🗺️ Google Maps</a>`
-            );
-
-            fmt = fmt.replace(/\n/g, '<br>');
+            fmt = fmt.replace(/\n/g, "<br>");
             return fmt;
         }
 
