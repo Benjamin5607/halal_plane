@@ -250,6 +250,7 @@
                 if (inputKey) GROQ_API_KEY = inputKey;
             }
             amina = new AIBrain(GROQ_API_KEY, TRANSLATIONS[currentLang]);
+            await amina.ensureModelsLoaded();
             await loadData();
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
@@ -260,45 +261,192 @@
             }
         };
 
-        async function loadData() {
-            try {
-                const res = await fetch(SHEET_CSV_URL);
-                const text = await res.text();
-                const rows = text.split('\n').map(row => {
-                    if (!row.trim()) return [];
-                    const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-                    return row.split(regex).map(cell => {
-                        let val = cell.trim();
-                        if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-                        return val.replace(/""/g, '"');
+        function escapeJsStr(str) {
+            return String(str || "")
+                .replace(/\\/g, "\\\\")
+                .replace(/'/g, "\\'")
+                .replace(/\n/g, "\\n")
+                .replace(/\r/g, "");
+        }
+
+        function resetDetailMap(message = null) {
+            if (detailMapInstance) {
+                detailMapInstance.remove();
+                detailMapInstance = null;
+            }
+            const mapEl = document.getElementById('detail-map');
+            mapEl.innerHTML = message
+                ? `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">${message}</div>`
+                : "";
+        }
+
+        function parseCsvText(text) {
+            const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const rows = normalized.split('\n').map(row => {
+                if (!row.trim()) return [];
+                const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+                return row.split(regex).map(cell => {
+                    let val = cell.trim();
+                    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+                    return val.replace(/""/g, '"');
+                });
+            });
+
+            if (!rows.length || !rows[0].length) throw new Error("Empty spreadsheet data");
+
+            const headers = rows[0].map(h => h.trim());
+            const places = [];
+
+            for (let i = 1; i < rows.length; i++) {
+                if (rows[i].length < headers.length) continue;
+                const obj = {};
+                rows[i].forEach((val, idx) => { if (headers[idx]) obj[headers[idx]] = val; });
+                if (obj.Country) {
+                    obj.lat = parseFloat(obj.lat);
+                    obj.lon = parseFloat(obj.lon);
+                    places.push(obj);
+                }
+            }
+
+            return places;
+        }
+
+        function buildPlaceDb(places) {
+            PLACE_DB = {};
+            places.forEach(place => {
+                if (!PLACE_DB[place.Country]) PLACE_DB[place.Country] = [];
+                PLACE_DB[place.Country].push(place);
+            });
+        }
+
+        function renderCountrySelect() {
+            const select = document.getElementById('country-select');
+            select.innerHTML = "";
+            const countries = Object.keys(PLACE_DB).sort();
+            countries.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                opt.innerText = c;
+                select.appendChild(opt);
+            });
+
+            if (countries.length > 0) {
+                currentCountry = countries.includes(currentCountry) ? currentCountry : countries[0];
+                select.value = currentCountry;
+                renderFilters();
+                renderList();
+            }
+        }
+
+        async function fetchTextWithRetry(url, retries = 3) {
+            let lastError = null;
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}_ts=${Date.now()}`, {
+                        cache: 'no-store',
+                        redirect: 'follow'
                     });
-                });
-                const headers = rows[0].map(h => h.trim());
-                PLACE_DB = {}; 
-                for(let i=1; i<rows.length; i++) {
-                    if(rows[i].length < headers.length) continue;
-                    let obj = {};
-                    rows[i].forEach((val, idx) => { if(headers[idx]) obj[headers[idx]] = val; });
-                    if(obj.Country) {
-                        if(!PLACE_DB[obj.Country]) PLACE_DB[obj.Country] = [];
-                        obj.lat = parseFloat(obj.lat);
-                        obj.lon = parseFloat(obj.lon);
-                        PLACE_DB[obj.Country].push(obj);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return await res.text();
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < retries) await new Promise(resolve => setTimeout(resolve, attempt * 500));
+                }
+            }
+            throw lastError || new Error('Network error');
+        }
+
+        async function loadDataFromCsv() {
+            const text = await fetchTextWithRetry(SHEET_CSV_URL);
+            return parseCsvText(text);
+        }
+
+        async function loadDataFromGas() {
+            const res = await fetch(`${GAS_URL}?action=data&_ts=${Date.now()}`, {
+                cache: 'no-store',
+                redirect: 'follow'
+            });
+            const raw = await res.text();
+
+            if (!res.ok || /Script function not found|Error/i.test(raw)) {
+                throw new Error('Google Apps Script data endpoint unavailable');
+            }
+
+            const payload = JSON.parse(raw);
+            if (!payload.ok || !Array.isArray(payload.places)) {
+                throw new Error(payload.error || 'Invalid Apps Script response');
+            }
+
+            return payload.places.map(place => ({
+                ...place,
+                lat: parseFloat(place.lat),
+                lon: parseFloat(place.lon)
+            }));
+        }
+
+        async function loadData() {
+            const errors = [];
+
+            try {
+                buildPlaceDb(await loadDataFromCsv());
+                renderCountrySelect();
+                return;
+            } catch (error) {
+                errors.push(`CSV: ${error.message}`);
+                console.warn(error);
+            }
+
+            try {
+                buildPlaceDb(await loadDataFromGas());
+                renderCountrySelect();
+                return;
+            } catch (error) {
+                errors.push(`GAS: ${error.message}`);
+                console.warn(error);
+            }
+
+            document.getElementById('place-list').innerHTML =
+                `<div class="card"><div class="card-desc">장소 데이터를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.<br><span style="color:#888;font-size:12px;">${errors.join(' | ')}</span></div></div>`;
+        }
+
+        async function submitPlaceRequest(name, country) {
+            const params = new URLSearchParams({ action: 'add', name, country });
+            const attempts = [
+                () => fetch(`${GAS_URL}?${params.toString()}`, { redirect: 'follow' }),
+                () => fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                    redirect: 'follow'
+                }),
+                () => fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'add', name, country }),
+                    redirect: 'follow'
+                })
+            ];
+
+            let lastError = 'Google Apps Script request failed';
+            for (const attempt of attempts) {
+                try {
+                    const res = await attempt();
+                    const raw = await res.text();
+
+                    if (/Script function not found|Error/i.test(raw)) {
+                        lastError = 'Apps Script에 doGet/doPost가 없습니다. gas/Code.gs를 다시 배포해 주세요.';
+                        continue;
                     }
+
+                    const payload = JSON.parse(raw);
+                    if (payload.ok) return payload;
+                    lastError = payload.error || lastError;
+                } catch (error) {
+                    lastError = error.message;
                 }
-                const select = document.getElementById('country-select');
-                select.innerHTML = "";
-                Object.keys(PLACE_DB).sort().forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c; opt.innerText = c;
-                    select.appendChild(opt);
-                });
-                if(Object.keys(PLACE_DB).length > 0) {
-                    currentCountry = Object.keys(PLACE_DB)[0];
-                    renderFilters();
-                    renderList();
-                }
-            } catch (e) { console.error(e); }
+            }
+
+            throw new Error(lastError);
         }
 
         // UI Functions
@@ -371,7 +519,7 @@
                     </div>
                     <div class="card-desc">${desc}</div>
                     <div class="card-actions">
-                        <button class="action-btn btn-review" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${currentCountry}')">AI REVIEW</button>
+                        <button class="action-btn btn-review" onclick="openReview('${escapeJsStr(p.name)}', '${escapeJsStr(currentCountry)}')">AI REVIEW</button>
                         <button class="action-btn btn-map" onclick="window.open('${getMapLink(p, currentCountry)}', '_blank')">MAP</button>
                     </div>
                 `;
@@ -423,24 +571,19 @@
                     addBtn.disabled = true;
 
                     try {
-                        await fetch(GAS_URL, {
-                            method: "POST",
-                            mode: "no-cors", 
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ name: name, country: country })
-                        });
+                        await submitPlaceRequest(name, country);
 
                         alert(`✅ Success! "${name}" has been requested.`);
                         addBtn.innerText = "✔ Requested";
-                        addBtn.style.background = "#10B981"; 
-                        
-                        if(!requestList.includes(name)) {
+                        addBtn.style.background = "#10B981";
+
+                        if (!requestList.includes(name)) {
                             requestList.push(name);
                             localStorage.setItem('requestList', JSON.stringify(requestList));
                         }
                     } catch (error) {
                         console.error(error);
-                        alert("❌ Failed to send request.");
+                        alert(`❌ Failed to send request.\n${error.message}`);
                         addBtn.innerText = "Retry";
                         addBtn.disabled = false;
                     }
@@ -453,13 +596,12 @@
             }
 
             if(place && place.lat && place.lon) {
-                if(detailMapInstance) detailMapInstance.remove();
+                resetDetailMap();
                 detailMapInstance = L.map('detail-map').setView([place.lat, place.lon], 16);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMapInstance);
                 L.marker([place.lat, place.lon]).addTo(detailMapInstance);
             } else {
-                if(detailMapInstance) detailMapInstance.remove();
-                document.getElementById('detail-map').innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:#666;'>No Map Data (External)</div>";
+                resetDetailMap("No Map Data (External)");
             }
 
             const reply = await amina.writeReview(name, country, isExternal, place);
@@ -486,7 +628,7 @@
                 const btnClass = isExternal ? "reco-btn external" : "reco-btn";
                 const label = isExternal ? `🌐 ${name} (Web Search)` : `📍 ${name}`;
                 
-                return `<br><button class="${btnClass}" onclick="openReview('${name.replace(/'/g, "\\'")}', '${currentCountry}', ${isExternal})">${label}</button>`;
+                return `<br><button class="${btnClass}" onclick="openReview('${escapeJsStr(name)}', '${escapeJsStr(currentCountry)}', ${isExternal})">${label}</button>`;
             });
 
             addChatBubble(fmtReply, 'bot', true);
@@ -518,7 +660,7 @@
             for(let c in PLACE_DB) {
                 PLACE_DB[c].forEach(p => {
                     if(p.lat && p.lon) {
-                        const html = `<div><b>${p.name}</b><br><button class="popup-btn" style="background:#10B981;color:white;" onclick="openReview('${p.name.replace(/'/g, "\\'")}', '${c}')">REVIEW</button></div>`;
+                        const html = `<div><b>${p.name}</b><br><button class="popup-btn" style="background:#10B981;color:white;" onclick="openReview('${escapeJsStr(p.name)}', '${escapeJsStr(c)}')">REVIEW</button></div>`;
                         L.marker([p.lat, p.lon]).addTo(markerLayer).bindPopup(html);
                     }
                 });
