@@ -5,7 +5,7 @@ export class AIBrain {
     constructor(apiKey, translations) {
         this.apiKey = apiKey;
         this.t = translations;
-        this.models = ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
+        this.models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
     }
 
     // 📏 거리 계산 (Haversine Formula)
@@ -60,9 +60,6 @@ export class AIBrain {
             else if (userLoc && p.distance < 20) score += 10;
             else if (userLoc && p.distance < 100) score += 5;
 
-            // (C) 만약 검색어가 명확한 지명(Seoul, Tokyo 등)이라면 거리 점수 무시 가능
-            // (AI가 판단하도록 정보만 넘김)
-
             return { place: p, score: score, match: keywordMatch };
         });
 
@@ -87,11 +84,8 @@ export class AIBrain {
         const relevantPlaces = this.getRelevantPlaces(query, db, userLoc);
         
         let contextStr = "";
-        let mode = "EXTERNAL"; 
 
         if (relevantPlaces.length > 0) {
-            mode = "DATABASE"; 
-            // 🔥 AI에게 [거리 정보]와 [국가 정보]를 같이 줌
             contextStr = relevantPlaces.map(p => 
                 `- [${p.name}] (${p.origin_country}, ${p.address}) ${p.distInfo || ""}: ${p.desc_en || p.desc_ko}`
             ).join("\n");
@@ -99,7 +93,6 @@ export class AIBrain {
             contextStr = "No direct match in DB.";
         }
 
-        // 🚨 [시스템 프롬프트] 지도 선택 무시하고 GPS와 질문만 따르도록 지시
         const systemPrompt = `
         You are Amina, a smart Halal travel guide.
         
@@ -135,7 +128,7 @@ export class AIBrain {
         return await this._callGroq(messages);
     }
 
-    // 📝 리뷰 생성 (기존 유지)
+    // 📝 리뷰 생성
     async writeReview(placeName, country, isExternal = false, placeData = null) {
         let prompt = "";
         if (isExternal) {
@@ -148,11 +141,20 @@ export class AIBrain {
             3. Why famous?
             Language: ${this.t.ai}
             `;
-        } else {
+        } else if (placeData) {
             prompt = `
             Write a 5-line review for "${placeName}" in ${country}.
-            Data: ${placeData.desc_en || placeData.desc_ko}
+            Data: ${placeData.desc_en || placeData.desc_ko || "No description available."}
             Focus on Halal status.
+            Language: ${this.t.ai}
+            `;
+        } else {
+            prompt = `
+            Write a brief 3-line guide for "${placeName}" in ${country}.
+            This place was requested but is not yet in our database.
+            1. Food Type?
+            2. Halal Status? (Honest guess)
+            3. Why might travelers visit?
             Language: ${this.t.ai}
             `;
         }
@@ -160,6 +162,7 @@ export class AIBrain {
     }
 
     async _callGroq(messages) {
+        let lastError = "";
         for (let model of this.models) {
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -171,8 +174,16 @@ export class AIBrain {
                     const data = await res.json();
                     return data.choices[0].message.content;
                 }
-            } catch (e) { console.error(e); }
+                const errBody = await res.text();
+                lastError = `${model}: ${res.status} ${errBody.slice(0, 120)}`;
+                console.error("Groq API error:", lastError);
+            } catch (e) {
+                lastError = e.message;
+                console.error(e);
+            }
         }
-        return "Amina is currently offline. Please try again.";
+        return lastError.includes("401")
+            ? "🔑 Invalid API Key. Please check your Groq API key."
+            : "Amina is currently offline. Please try again.";
     }
 }
